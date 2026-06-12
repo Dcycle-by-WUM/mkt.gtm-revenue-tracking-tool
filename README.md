@@ -46,5 +46,7 @@ vars (ver `.env.example`).
   de ejemplo). El resto son stubs marcados por fase.
 
 ## Documentación
+- 🔌 **[Guía de conexiones (Ops/IT)](docs/CONEXIONES.md)** — qué conectar, con qué credenciales, qué campos exactos (HubSpot/Supermetrics) y dónde acaba cada dato. **Runbook de setup.**
+- 👀 **[Preview de las pantallas](docs/PREVIEW.md)** — contenido de las 13 pantallas sin desplegar.
 - 📄 **[Brief funcional + técnico](docs/BRIEF.md)** — qué hace, modelo de datos, motor de cruce de KPIs, pantallas, ABM/Heat Score, SEO/AEO, roadmap y decisiones abiertas. (Base para el PRD.)
 - 🧠 **[Racional refinado v2](docs/RACIONAL.md)** — decisiones cerradas y hallazgos validados con datos reales.
