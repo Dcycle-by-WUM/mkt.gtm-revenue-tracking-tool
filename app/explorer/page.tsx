@@ -1,92 +1,79 @@
 "use client";
 
 import { useState } from "react";
-import { PageHeader } from "@/components/Page";
+import { PageHeader, Panel } from "@/components/Page";
 import { StatusBanner } from "@/components/StatusBanner";
-import { mockCampaigns, type CampaignRow } from "@/lib/mock-data";
-import { fmtEur, fmtNum, fmtPct, roi, type ChannelMetrics } from "@/lib/kpis";
+import { FilterBar } from "@/components/FilterBar";
+import { PivotTable } from "@/components/PivotTable";
+import {
+  mockCampaigns, applyOverrides, filterCampaigns, countriesOf,
+  emptyFilters, NO_COUNTRY, OVERRIDES_KEY, type CountryOverrides,
+} from "@/lib/mock-data";
+import { useLocalState } from "@/lib/store";
 
-// Explorer / Desglose libre (pivot) — Brief §8.6.
-type Dimension = "channel" | "country" | "campaign";
-const dims: { key: Dimension; label: string }[] = [
-  { key: "channel", label: "Canal" },
-  { key: "country", label: "País" },
-  { key: "campaign", label: "Campaña" },
-];
-
-const empty = (): ChannelMetrics => ({
-  spend: 0, impressions: 0, clicks: 0, leads: 0, mql: 0, sql: 0, pipeline: 0, closedWon: 0,
-});
-
-function pivot(rows: CampaignRow[], dim: Dimension) {
-  const map = new Map<string, ChannelMetrics>();
-  for (const r of rows) {
-    const key = r[dim];
-    const acc = map.get(key) ?? empty();
-    acc.spend += r.spend; acc.leads += r.leads; acc.mql += r.mql;
-    acc.sql += r.sql; acc.pipeline += r.pipeline; acc.closedWon += r.closedWon;
-    map.set(key, acc);
-  }
-  return [...map.entries()];
-}
+// Explorer / Desglose libre — Brief §8.6. Pivot + corrección de país (§7.4).
+const COUNTRY_OPTIONS = [NO_COUNTRY, "ES", "UK", "DE", "FR", "US", "MX"];
 
 export default function ExplorerPage() {
-  const [dim, setDim] = useState<Dimension>("country");
-  const grouped = pivot(mockCampaigns, dim);
+  const [overrides, setOverrides] = useLocalState<CountryOverrides>(OVERRIDES_KEY, {});
+  const [filters, setFilters] = useState(emptyFilters);
+
+  const all = applyOverrides(mockCampaigns, overrides);
+  const rows = filterCampaigns(all, filters);
+
+  // Campañas que siguen sin país asignado (para revisarlas / corregirlas).
+  const noCountry = [...new Map(all.filter((r) => r.country === NO_COUNTRY).map((r) => [r.campaign, r])).values()];
+
+  const setCountry = (campaign: string, country: string) => {
+    const next = { ...overrides };
+    if (country === NO_COUNTRY) delete next[campaign];
+    else next[campaign] = country;
+    setOverrides(next);
+  };
 
   return (
     <div>
       <PageHeader
         title="Explorer / Desglose libre (pivot)"
-        subtitle="Pivota cualquier métrica por Canal / País / Campaña / Mes; vistas guardadas y exportación en producción."
-        phase="F2"
+        subtitle="Pivota por Canal / País / Campaña / Mes con los filtros aplicados. Revisa y corrige las campañas sin país."
       />
       <StatusBanner />
+      <FilterBar filters={filters} setFilters={setFilters} countries={countriesOf(all)} />
 
-      <div className="mb-4 flex items-center gap-2">
-        <span className="text-sm text-[var(--muted)]">Pivotar por:</span>
-        {dims.map((d) => (
-          <button
-            key={d.key}
-            onClick={() => setDim(d.key)}
-            className={`rounded-md px-3 py-1.5 text-sm ${
-              dim === d.key
-                ? "bg-[var(--accent)]/20 text-[var(--accent)]"
-                : "bg-white/5 text-[var(--text)] hover:bg-white/10"
-            }`}
-          >
-            {d.label}
-          </button>
-        ))}
-      </div>
+      <PivotTable rows={rows} initialDim="country" />
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--panel)] text-left text-xs uppercase text-[var(--muted)]">
-            <tr>
-              <th className="px-4 py-3">{dims.find((d) => d.key === dim)!.label}</th>
-              <th className="px-4 py-3 text-right">Spend</th>
-              <th className="px-4 py-3 text-right">Leads</th>
-              <th className="px-4 py-3 text-right">MQL</th>
-              <th className="px-4 py-3 text-right">SQL</th>
-              <th className="px-4 py-3 text-right">Pipeline €</th>
-              <th className="px-4 py-3 text-right">ROI</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grouped.map(([key, m]) => (
-              <tr key={key} className="border-t border-[var(--border)]">
-                <td className="px-4 py-3 font-mono text-xs">{key}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{fmtEur(m.spend)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{fmtNum(m.leads)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{fmtNum(m.mql)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{fmtNum(m.sql)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{fmtEur(m.pipeline)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{fmtPct(roi(m))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mt-8">
+        <Panel title={`Campañas sin país / Multi (${noCountry.length})`}>
+          {noCountry.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">Todas las campañas tienen país asignado. 🎉</p>
+          ) : (
+            <div className="space-y-2">
+              <p className="mb-2 text-sm text-[var(--muted)]">
+                Asigna un país; el cambio se aplica en todas las pantallas (override §7.4).
+              </p>
+              {noCountry.map((r) => (
+                <div key={r.campaign} className="flex items-center justify-between gap-3 border-b border-[var(--border)] py-2 last:border-0">
+                  <div>
+                    <span className="font-mono text-xs">{r.campaign}</span>
+                    <span className="ml-2 text-xs text-[var(--muted)]">{r.channel}</span>
+                  </div>
+                  <select
+                    className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-sm"
+                    value={overrides[r.campaign] ?? NO_COUNTRY}
+                    onChange={(e) => setCountry(r.campaign, e.target.value)}
+                  >
+                    {COUNTRY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+          {Object.keys(overrides).length > 0 && (
+            <button onClick={() => setOverrides({})} className="mt-3 text-xs text-[var(--muted)] underline">
+              Deshacer todas las asignaciones
+            </button>
+          )}
+        </Panel>
       </div>
     </div>
   );

@@ -9,6 +9,21 @@ Esta es una **vista del contenido real de la app** para revisar las pantallas
 > definiciones de KPI. Las reales aparecen al conectar Supermetrics + HubSpot.
 > Para verlo interactivo: `npm install && npm run dev` → http://localhost:3000
 
+## ✨ Interactividad (editable en el prototipo)
+
+Ya **no es una maqueta estática**. En el prototipo puedes:
+
+- **Filtrar por país / mes (y canal)** en Overview, Paid, Forecast y Explorer. Los datos abarcan 3 meses (2026-04 a 2026-06).
+- **Overview**: tabla dinámica que se **recalcula sola** al cambiar agrupación (Canal / País / Campaña / Mes) y filtros.
+- **Paid**: dejar una **nota de apuntes por campaña**.
+- **Forecast**: **editar** objetivos y real, **añadir/borrar** filas por canal/país; el % de cumplimiento se actualiza solo.
+- **Explorer**: ver las campañas **"Sin país / Multi"** y **asignarles país**; el override se aplica en todas las pantallas.
+- **ABM — Cuentas**: filtrar por país/SDR y editar objetivo ABM, SDR y notas.
+
+> Los cambios se guardan en el navegador (`localStorage`). En producción irán
+> contra Supabase con autor/fecha (auditoría). Las tablas de abajo son un
+> ejemplo del mes **2026-06**; con los filtros los números cambian.
+
 ---
 
 ## 1. Overview — "Cómo vamos"  ·  `/`
