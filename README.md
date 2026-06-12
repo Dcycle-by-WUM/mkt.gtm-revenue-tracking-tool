@@ -14,7 +14,37 @@ Herramienta de tracking de Marketing/GTM que **unifica el gasto de paid media** 
 - **Datos + Auth:** **Supabase** (Postgres + RLS; SSO **Google Workspace**).
 - **Ingesta:** **Supermetrics API** (LinkedIn Ads, Google Ads, GSC/Bing/GA) + **HubSpot API**. Jobs en Netlify Scheduled Functions / Supabase.
 
+## Desarrollo local
+
+```bash
+npm install
+cp .env.example .env.local   # rellenar con los secretos cuando estén disponibles
+npm run dev                  # http://localhost:3000
+npm run build                # build de producción (lo que ejecuta Netlify)
+```
+
+La app **arranca y despliega sin secretos**, mostrando datos de ejemplo y un
+aviso de qué falta conectar. Las cifras reales aparecen al configurar las env
+vars (ver `.env.example`).
+
+## Deploy (Netlify)
+
+- Proyecto **`dcycle-mkt-gtm-revenue-tracking-tool`** (team **Dcycle**, Pro), con
+  protección por contraseña activada para todos los deploys.
+- `main` → URL de producción. Cada rama genera su **branch deploy** propio para
+  revisión de Ops sin tocar `main`.
+- Secretos en **env vars de Netlify** (nunca en el repo): Supabase, Supermetrics,
+  Google OAuth. HubSpot bloqueado hasta tener API key (§12.1 del brief).
+
+## Estado del código
+
+- **F0 (scaffolding):** ✅ Next.js + Netlify + navegación de las 13 pantallas + CI.
+- **Camino paid:** modelo de datos (`supabase/migrations/0001_paid_core.sql`),
+  librería de KPIs (`lib/kpis.ts`) y esqueleto de ingesta Supermetrics
+  (`lib/supermetrics.ts`), pendientes de credenciales para datos reales.
+- **Pantallas live:** Overview, Paid Media Performance, Data Health (con datos
+  de ejemplo). El resto son stubs marcados por fase.
+
 ## Documentación
 - 📄 **[Brief funcional + técnico](docs/BRIEF.md)** — qué hace, modelo de datos, motor de cruce de KPIs, pantallas, ABM/Heat Score, SEO/AEO, roadmap y decisiones abiertas. (Base para el PRD.)
-
-> Estado: fase de definición. Próximo paso: convertir el brief en PRD y arrancar F0 (scaffolding).
+- 🧠 **[Racional refinado v2](docs/RACIONAL.md)** — decisiones cerradas y hallazgos validados con datos reales.
