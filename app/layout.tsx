@@ -13,13 +13,15 @@ export const metadata: Metadata = {
 const nav: { href: string; label: string; phase?: string }[] = [
   { href: "/", label: "Overview — Cómo vamos" },
   { href: "/paid", label: "Paid Media Performance" },
-  { href: "/data-health", label: "Data Health" },
   { href: "/campaign-detail", label: "Campaign Detail", phase: "F2" },
   { href: "/forecast", label: "Pipeline & Forecast", phase: "F3" },
   { href: "/explorer", label: "Explorer (pivot)", phase: "F2" },
   { href: "/abm-accounts", label: "ABM — Cuentas", phase: "F4" },
+  { href: "/abm-timeline", label: "ABM — Account Timeline", phase: "F4" },
   { href: "/abm-heat", label: "ABM — Heat Score", phase: "F4" },
+  { href: "/abm-sdr", label: "ABM — por SDR", phase: "F4" },
   { href: "/organic", label: "Orgánico (SEO) + AEO", phase: "F5" },
+  { href: "/data-health", label: "Data Health" },
   { href: "/admin", label: "Admin / Settings", phase: "F2" },
 ];
 

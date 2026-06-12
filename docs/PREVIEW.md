@@ -53,19 +53,72 @@ Estado real de cada fuente de ingesta:
 
 ---
 
-## 4. Resto de pantallas (stubs por fase)
+## 4. Campaign Detail  ·  `/campaign-detail`  (F2)
 
-Visibles en la navegación con su etiqueta de fase, para ver el alcance completo:
+Detalle de `esp_mensaje_españa_documento [mofu]` (grupo `INT_ESP_2026`, país ES, UTM matcheado exacto):
+- **Spend timeline** semanal (gráfico de barras).
+- **Embudo**: 142 Leads → 96 MQL → 18 SQL → 84.000 € pipeline → 21.000 € won. CPL 34 € · ROI 1642,7 %.
+- Notas editables.
 
-| Pantalla | Ruta | Fase |
-| --- | --- | --- |
-| Campaign Detail | `/campaign-detail` | F2 |
-| Pipeline & Forecast | `/forecast` | F3 |
-| Explorer (pivot) | `/explorer` | F2 |
-| ABM — Cuentas | `/abm-accounts` | F4 |
-| ABM — Heat Score | `/abm-heat` | F4 |
-| Orgánico (SEO) + AEO | `/organic` | F5 |
-| Admin / Settings | `/admin` | F2 |
+## 5. Pipeline & Forecast vs Objetivos  ·  `/forecast`  (F3)
+
+Forecast manual vs real con pacing (🟢 ≥100 % · 🟡 85–99 % · 🔴 <85 %):
+
+| Canal | Mes | País | Spend obj. | Spend real | Pipeline obj. | Pipeline real | % cumpl. |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| LinkedIn | 2026-06 | ES | 5.000 € | 4.820 € | 90.000 € | 84.000 € | 🟡 93,3 % |
+| LinkedIn | 2026-06 | UK | 6.500 € | 6.100 € | 110.000 € | 96.000 € | 🟡 87,3 % |
+| Google | 2026-06 | ES | 3.000 € | 2.940 € | 55.000 € | 61.000 € | 🟢 110,9 % |
+| Google | 2026-06 | DE | 4.000 € | 3.380 € | 60.000 € | 47.000 € | 🔴 78,3 % |
+
+## 6. Explorer / pivot  ·  `/explorer`  (F2)
+
+Tabla pivotable **interactiva** por Canal / País / Campaña (botones). Ejemplo pivotando por **País**:
+
+| País | Spend | Leads | MQL | SQL | Pipeline € | ROI |
+| --- | --- | --- | --- | --- | --- | --- |
+| ES | 7.760 € | 276 | 184 | 32 | 145.000 € | 1768,6 % |
+| UK | 6.100 € | 118 | 71 | 12 | 96.000 € | 1473,8 % |
+| DE | 3.380 € | 88 | 52 | 9 | 47.000 € | 1290,5 % |
+| Sin país / Multi | 1.510 € | 41 | 22 | 3 | 15.000 € | 893,4 % |
+
+## 7. ABM — Cuentas  ·  `/abm-accounts`  (F4)
+
+Cuentas-objetivo con Heat Score (= máximo de sus contactos), SDR e impacto de ads:
+
+| Cuenta | País | SDR | ABM | Heat Score | Última actividad | Ads |
+| --- | --- | --- | --- | --- | --- | --- |
+| Acme Logistics | ES | Juanjo | 🎯 | 100 · 🔥 Caliente | 2026-06-11 | ✅ |
+| Northwind Foods | UK | Paula | 🎯 | 96 · 🔥 Caliente | 2026-06-09 | ✅ |
+| Helios Energy | DE | Juanjo | 🎯 | 36 · 🌱 Tibio | 2026-05-30 | — |
+| Verde Retail | ES | Paula | — | 9 · ❄️ Frío | 2026-06-12 | ✅ |
+
+## 8. ABM — Account Timeline  ·  `/abm-timeline`  (F4)
+
+Línea temporal de **Acme Logistics**: 📣 impactada por LinkedIn Ads (15 may) → 📄 descargó Calculadora HdC (20 may) → ✉️ abrió secuencia (28 may) → 🌐 visitó /pricing (4 jun) → 🎥 webinar Alcance 3 (9 jun) → 🤝 solicitó demo (11 jun).
+
+## 9. ABM — Heat Score / Señales de intención  ·  `/abm-heat`  (F4)
+
+Ranking pre-demo con el **algoritmo §H** (señales × recencia) calculado en vivo, con desglose por señal. Ejemplo (Laura @ Acme): Conversiones≥5 +70, Demo +40, Email respondido +50, Opens +24, Clicks +20, Page views +16, LinkedIn +15 → **score 100 · 🔥**.
+
+| Contacto | Empresa | Score | Banda |
+| --- | --- | --- | --- |
+| Laura (Head of Sustainability) | Acme Logistics | 100 | 🔥 Caliente |
+| Mark (ESG Manager) | Northwind Foods | 96 | 🔥 Caliente |
+| Sven (Operations Director) | Helios Energy | 36 | 🌱 Tibio |
+| Ana (Marketing Lead) | Verde Retail | 9 | ❄️ Frío |
+
+## 10. ABM — Overview por SDR  ·  `/abm-sdr`  (F4)
+
+Cada SDR vs sus cuentas asignadas, con nº de cuentas y leads 🔥. (Juanjo: Acme, Helios · Paula: Northwind, Verde Retail.)
+
+## 11. Orgánico (SEO) + AEO  ·  `/organic`  (F5)
+
+KPIs SEO (tráfico non-branded, DA 47, 34 keywords Top 3, 61 MQL orgánicos, 72.000 € pipeline) y AEO (AI Visibility 23 %, Share of Voice 12 %, 14 leads desde IA, Bing), conectados a pipeline €.
+
+## 12. Admin / Settings  ·  `/admin`  (F2)
+
+Conexiones (estado por integración), roles SSO (Admin/Marketing/SDR/Solo-lectura), definiciones de negocio editables (regla MQL, país por grupo, pesos Heat Score) y overrides de país.
 
 ---
 
