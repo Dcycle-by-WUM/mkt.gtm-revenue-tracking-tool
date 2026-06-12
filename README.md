@@ -47,6 +47,7 @@ vars (ver `.env.example`).
 
 ## Documentación
 - 🔌 **[Guía de conexiones (Ops/IT)](docs/CONEXIONES.md)** — qué conectar, con qué credenciales, qué campos exactos (HubSpot/Supermetrics) y dónde acaba cada dato. **Runbook de setup.**
+- 🧾 **[Registro de decisiones](docs/DECISIONES.md)** — estado de las decisiones de negocio (cerradas / pendientes / on hold) con dueños.
 - 👀 **[Preview de las pantallas](docs/PREVIEW.md)** — contenido de las 13 pantallas sin desplegar.
 - 📄 **[Brief funcional + técnico](docs/BRIEF.md)** — qué hace, modelo de datos, motor de cruce de KPIs, pantallas, ABM/Heat Score, SEO/AEO, roadmap y decisiones abiertas. (Base para el PRD.)
 - 🧠 **[Racional refinado v2](docs/RACIONAL.md)** — decisiones cerradas y hallazgos validados con datos reales.
