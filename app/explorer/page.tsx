@@ -40,7 +40,7 @@ export default function ExplorerPage() {
       <StatusBanner />
       <FilterBar filters={filters} setFilters={setFilters} countries={countriesOf(all)} />
 
-      <PivotTable rows={rows} initialDim="country" />
+      <PivotTable rows={rows} initialDims={["country"]} />
 
       <div className="mt-8">
         <Panel title={`Campañas sin país / Multi (${noCountry.length})`}>

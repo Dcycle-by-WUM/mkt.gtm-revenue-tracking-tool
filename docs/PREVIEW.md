@@ -14,9 +14,10 @@ Esta es una **vista del contenido real de la app** para revisar las pantallas
 Ya **no es una maqueta estática**. En el prototipo puedes:
 
 - **Filtrar por país / mes (y canal)** en Overview, Paid, Forecast y Explorer. Los datos abarcan 3 meses (2026-04 a 2026-06).
-- **Overview**: tabla dinámica que se **recalcula sola** al cambiar agrupación (Canal / País / Campaña / Mes) y filtros.
+- **Overview**: tabla dinámica **multi-nivel** — encadena varias dimensiones (p.ej. **País › Mes** o **País › Canal**) para montar tu propia agrupación; se recalcula sola.
+- **Campaign Detail**: **etiquetas (tags)** por campaña para agrupar (p.ej. 10 campañas bajo "Webinar") + tabla de **resultados por etiqueta**.
 - **Paid**: dejar una **nota de apuntes por campaña**.
-- **Forecast**: **editar** objetivos y real, **añadir/borrar** filas por canal/país; el % de cumplimiento se actualiza solo.
+- **Forecast**: **editar solo los objetivos**. El **Spend real y el Pipeline real son de solo lectura** (se calculan de los datos reales con atribución, no se tocan). Añadir/borrar objetivos por canal/país.
 - **Explorer**: ver las campañas **"Sin país / Multi"** y **asignarles país**; el override se aplica en todas las pantallas.
 - **ABM — Cuentas**: filtrar por país/SDR y editar objetivo ABM, SDR y notas.
 

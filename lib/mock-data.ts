@@ -90,6 +90,10 @@ export function applyOverrides(rows: CampaignRow[], ov: CountryOverrides): Campa
 
 // ── Agrupación (pivot) ─────────────────────────────────────────
 export type Dimension = "channel" | "country" | "campaign" | "month";
+export const DIMENSION_LABELS: Record<Dimension, string> = {
+  channel: "Canal", country: "País", campaign: "Campaña", month: "Mes",
+};
+
 export function groupBy(rows: CampaignRow[], dim: Dimension): [string, ChannelMetrics][] {
   const map = new Map<string, ChannelMetrics>();
   for (const r of rows) {
@@ -101,6 +105,23 @@ export function groupBy(rows: CampaignRow[], dim: Dimension): [string, ChannelMe
     map.set(key, acc);
   }
   return [...map.entries()].sort((a, b) => b[1].spend - a[1].spend);
+}
+
+// Pivot multi-dimensión: agrupa por la combinación ordenada de dimensiones.
+export type MultiGroup = { keys: string[]; metrics: ChannelMetrics };
+export function groupByMulti(rows: CampaignRow[], dims: Dimension[]): MultiGroup[] {
+  if (dims.length === 0) return [{ keys: [], metrics: sumMetrics(rows) }];
+  const map = new Map<string, MultiGroup>();
+  for (const r of rows) {
+    const keys = dims.map((d) => String(r[d]));
+    const k = keys.join("∣");
+    const g = map.get(k) ?? { keys, metrics: emptyMetrics() };
+    g.metrics.spend += r.spend; g.metrics.impressions += r.impressions; g.metrics.clicks += r.clicks;
+    g.metrics.leads += r.leads; g.metrics.mql += r.mql; g.metrics.sql += r.sql;
+    g.metrics.pipeline += r.pipeline; g.metrics.closedWon += r.closedWon;
+    map.set(k, g);
+  }
+  return [...map.values()].sort((a, b) => b.metrics.spend - a.metrics.spend);
 }
 
 // ── Estado de fuentes (Data Health §8.12) ──────────────────────
@@ -120,17 +141,29 @@ export const mockSpendTimeline: { date: string; spend: number }[] = [
   { date: "2026-05-22", spend: 280 }, { date: "2026-05-29", spend: 360 }, { date: "2026-06-05", spend: 410 }, { date: "2026-06-12", spend: 300 },
 ];
 
-// ── Forecast vs objetivos (§8.5) — base; editable en la pantalla ──
+// ── Forecast vs objetivos (§8.5) ───────────────────────────────
+// Solo los OBJETIVOS son manuales/editables. El "real" (spend y pipeline) se
+// CALCULA de los datos reales (Ads/HubSpot con atribución) y no se edita.
 export type ForecastRow = {
   channel: Channel; month: string; country: string;
-  targetSpend: number; actualSpend: number; targetPipeline: number; actualPipeline: number;
+  targetSpend: number; targetPipeline: number;
 };
 export const mockForecast: ForecastRow[] = [
-  { channel: "LinkedIn", month: "2026-06", country: "ES", targetSpend: 5000, actualSpend: 4820, targetPipeline: 90000, actualPipeline: 84000 },
-  { channel: "LinkedIn", month: "2026-06", country: "UK", targetSpend: 6500, actualSpend: 6100, targetPipeline: 110000, actualPipeline: 96000 },
-  { channel: "Google", month: "2026-06", country: "ES", targetSpend: 3000, actualSpend: 2940, targetPipeline: 55000, actualPipeline: 61000 },
-  { channel: "Google", month: "2026-06", country: "DE", targetSpend: 4000, actualSpend: 3380, targetPipeline: 60000, actualPipeline: 47000 },
+  { channel: "LinkedIn", month: "2026-06", country: "ES", targetSpend: 5000, targetPipeline: 90000 },
+  { channel: "LinkedIn", month: "2026-06", country: "UK", targetSpend: 6500, targetPipeline: 110000 },
+  { channel: "Google", month: "2026-06", country: "ES", targetSpend: 3000, targetPipeline: 55000 },
+  { channel: "Google", month: "2026-06", country: "DE", targetSpend: 4000, targetPipeline: 60000 },
 ];
+
+// "Real" calculado del dataset (no editable): suma de spend/pipeline de las
+// campañas que casan por canal + mes + país (atribución).
+export function forecastActuals(
+  campaigns: CampaignRow[],
+  channel: Channel, month: string, country: string,
+): { spend: number; pipeline: number } {
+  const m = campaigns.filter((r) => r.channel === channel && r.month === month && r.country === country);
+  return { spend: m.reduce((s, r) => s + r.spend, 0), pipeline: m.reduce((s, r) => s + r.pipeline, 0) };
+}
 
 // ── ABM ────────────────────────────────────────────────────────
 export type AbmAccount = {
