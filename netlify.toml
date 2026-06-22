@@ -11,6 +11,12 @@
   # Fijamos Node 20 para que el build de Netlify coincida con CI (.github) y con `engines` (package.json).
   NODE_VERSION = "20"
 
+# Scheduled Functions: jobs de ingesta (PRD §5). El schedule lo declara cada
+# función en su propio `config.schedule`; aquí solo fijamos la carpeta.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
