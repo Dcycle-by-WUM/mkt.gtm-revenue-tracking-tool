@@ -118,6 +118,48 @@ async function pageAll<T>(
   return all;
 }
 
+// Configuración de la ventana de ingesta (PRD §6 / DECISIONES #8).
+//   HUBSPOT_BACKFILL_FROM    — fecha mínima de createdate (ISO). Default: 2025-12-01.
+//   HUBSPOT_CONTACT_LEAD_SOURCES — valores de `lead_source` a incluir,
+//                              separados por coma. Default: "Inbound".
+//                              Pon vacío ("") para incluir todos.
+function backfillFrom(): string {
+  return process.env.HUBSPOT_BACKFILL_FROM || "2025-12-01T00:00:00Z";
+}
+function contactLeadSources(): string[] {
+  const raw = process.env.HUBSPOT_CONTACT_LEAD_SOURCES;
+  if (raw === undefined) return ["Inbound"];
+  if (raw.trim() === "") return [];
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+// Pagina el endpoint `/search` de HubSpot (filtros + sort + cursor `after`).
+async function searchAll<T>(
+  objectType: "contacts" | "deals" | "companies",
+  body: Record<string, unknown>,
+): Promise<T[]> {
+  const token = requireToken();
+  const all: T[] = [];
+  let after: string | undefined;
+  // Hasta 10k resultados por query de search (límite HubSpot).
+  for (let i = 0; i < 100; i++) {
+    const payload = { ...body, limit: 100, ...(after ? { after } : {}) };
+    const res = await fetch(`${HUBSPOT_BASE}/crm/v3/objects/${objectType}/search`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`HubSpot search ${objectType} → ${res.status}: ${await res.text()}`);
+    }
+    const page = (await res.json()) as HsPage<T>;
+    all.push(...page.results);
+    after = page.paging?.next?.after;
+    if (!after) break;
+  }
+  return all;
+}
+
 function mapContact(r: HsRecord): HsContact {
   const p = r.properties;
   const utmRaw = p.utm_campaign ?? null;
@@ -152,8 +194,25 @@ function mapContact(r: HsRecord): HsContact {
 }
 
 export async function fetchContacts(): Promise<HsContact[]> {
-  const records = await pageAll<HsRecord>("/crm/v3/objects/contacts", {
-    properties: [...PROPS_CONTACT],
+  const cutoff = backfillFrom();
+  const sources = contactLeadSources();
+
+  // Filtro: createdate >= cutoff AND (lead_source IN sources si hay filtro).
+  const filters: { propertyName: string; operator: string; value?: string; values?: string[] }[] = [
+    { propertyName: "createdate", operator: "GTE", value: cutoff },
+  ];
+  if (sources.length > 0) {
+    filters.push({
+      propertyName: "lead_source",
+      operator: sources.length === 1 ? "EQ" : "IN",
+      ...(sources.length === 1 ? { value: sources[0] } : { values: sources }),
+    });
+  }
+
+  const records = await searchAll<HsRecord>("contacts", {
+    properties: [...PROPS_CONTACT, "lead_source"],
+    filterGroups: [{ filters }],
+    sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
   });
   return records.map(mapContact);
 }
@@ -171,6 +230,10 @@ export type HsDeal = {
 };
 
 export async function fetchDeals(): Promise<HsDeal[]> {
+  // Deals: el endpoint objects v3 SÍ devuelve `associations` sin scope extra
+  // (a diferencia de search). Pero no acepta filtro de fecha. Filtramos en
+  // código contra `backfillFrom()` para limitar volumen.
+  const cutoffMs = new Date(backfillFrom()).getTime();
   const records = await pageAll<HsRecord & {
     associations?: {
       contacts?: { results: { id: string }[] };
@@ -181,7 +244,12 @@ export async function fetchDeals(): Promise<HsDeal[]> {
     associations: ["contacts", "companies"],
   });
 
-  return records.map((r) => {
+  return records
+    .filter((r) => {
+      const cd = r.properties.createdate;
+      return cd ? new Date(cd).getTime() >= cutoffMs : false;
+    })
+    .map((r) => {
     const p = r.properties;
     return {
       hubspot_deal_id: r.id,
@@ -245,6 +313,7 @@ const ENGAGEMENT_PATHS: { path: string; kind: HsEngagement["kind"]; bodyProp: st
 ];
 
 export async function fetchEngagements(): Promise<HsEngagement[]> {
+  const cutoffMs = new Date(backfillFrom()).getTime();
   const all: HsEngagement[] = [];
   for (const { path, kind, bodyProp } of ENGAGEMENT_PATHS) {
     const records = await pageAll<HsRecord & {
@@ -257,10 +326,13 @@ export async function fetchEngagements(): Promise<HsEngagement[]> {
       associations: ["contacts", "companies"],
     });
     for (const r of records) {
+      const occurred = r.properties.hs_timestamp ?? r.properties.createdate;
+      if (!occurred) continue;
+      if (new Date(occurred).getTime() < cutoffMs) continue;
       all.push({
         hubspot_engagement_id: r.id,
         kind,
-        occurred_at: r.properties.hs_timestamp ?? r.properties.createdate ?? new Date().toISOString(),
+        occurred_at: occurred,
         hubspot_contact_id: r.associations?.contacts?.results?.[0]?.id ?? null,
         hubspot_company_id: r.associations?.companies?.results?.[0]?.id ?? null,
         body: r.properties[bodyProp] ?? null,
