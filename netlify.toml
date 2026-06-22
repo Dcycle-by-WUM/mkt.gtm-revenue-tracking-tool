@@ -1,9 +1,15 @@
 # Netlify config — proyecto dcycle-mkt-gtm-revenue-tracking-tool (team Dcycle, Pro)
+# Site ID: 170e45ec-0ac4-4b40-a067-0f1a0d995ff3
+# Despliegue continuo GitHub → Netlify: ver docs/CONEXIONES.md §0.
 # El runtime de Next.js de Netlify detecta el framework automáticamente.
 
 [build]
   command = "npm run build"
   publish = ".next"
+
+[build.environment]
+  # Fijamos Node 20 para que el build de Netlify coincida con CI (.github) y con `engines` (package.json).
+  NODE_VERSION = "20"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
