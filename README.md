@@ -46,6 +46,7 @@ vars (ver `.env.example`).
   de ejemplo). El resto son stubs marcados por fase.
 
 ## Documentación
+- 📦 **[PRD (documento canónico)](docs/PRD.md)** — qué hace, con qué se conecta, qué lee de cada fuente, pantallas y **estado real del código**. Punto de entrada para que todo el equipo esté en la misma línea.
 - 🔌 **[Guía de conexiones (Ops/IT)](docs/CONEXIONES.md)** — qué conectar, con qué credenciales, qué campos exactos (HubSpot/Supermetrics) y dónde acaba cada dato. **Runbook de setup.**
 - 🧾 **[Registro de decisiones](docs/DECISIONES.md)** — estado de las decisiones de negocio (cerradas / pendientes / on hold) con dueños.
 - 👀 **[Preview de las pantallas](docs/PREVIEW.md)** — contenido de las 13 pantallas sin desplegar.
