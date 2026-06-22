@@ -4,6 +4,8 @@ import { getAccountTimeline } from "@/lib/data/timeline";
 import { listAccounts } from "@/lib/data/accounts";
 import { TimelineSelector } from "./timeline-selector";
 
+export const dynamic = "force-dynamic";
+
 // ABM — Account Timeline — PRD §9 (8).
 const ICON: Record<string, string> = {
   Ad: "📣",

@@ -2,6 +2,8 @@ import { PageHeader } from "@/components/Page";
 import { StatusBanner } from "@/components/StatusBanner";
 import { getSeoKpis, getAeoKpis, type OrganicKpi } from "@/lib/data/organic";
 
+export const dynamic = "force-dynamic";
+
 // Orgánico (SEO) + AEO — PRD §11.
 function KpiTable({ rows }: { rows: OrganicKpi[] }) {
   return (

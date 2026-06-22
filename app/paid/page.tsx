@@ -4,6 +4,8 @@ import { listCampaigns } from "@/lib/data/campaigns";
 import { listNotes } from "@/lib/data/notes";
 import { PaidClient } from "./paid-client";
 
+export const dynamic = "force-dynamic";
+
 // Paid Media Performance — PRD §9 (3).
 export default async function PaidPage() {
   const [initial, notes] = await Promise.all([listCampaigns(), listNotes("campaign")]);

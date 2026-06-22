@@ -4,6 +4,8 @@ import { listCampaigns } from "@/lib/data/campaigns";
 import { listCampaignTags } from "@/lib/data/campaign-tags";
 import { CampaignDetailClient } from "./campaign-client";
 
+export const dynamic = "force-dynamic";
+
 // Campaign Detail — PRD §9 (4).
 const DEFAULT_TAGS: Record<string, string[]> = {
   "wb_taller-doble-materialidad": ["Webinar"],
