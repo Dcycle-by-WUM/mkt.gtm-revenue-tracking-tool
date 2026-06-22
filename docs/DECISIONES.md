@@ -13,7 +13,7 @@ Estado de las decisiones abiertas del Brief §12 / Racional §K. Leyenda: ✅ ce
 | 7 | **Plataforma AI-visibility** (Profound/Peec/Otterly/Semrush AI) + prompts y competidores | ⏸️ On hold | Owners: **Davide y Cris**. Tabla `ai_visibility` con campo `platform` ya soporta cualquier proveedor. Fase 5. |
 | 8 | **HubSpot API key** | ✅ Cerrada | Token configurado en Netlify env (Álvaro Granados, 22-jun). Cron `sync-crm.ts` arranca en el próximo deploy. |
 | 9 | **SSO Google Workspace** | ⏳ Pendiente | Se enchufa después de que la app esté en producción. Mientras tanto, **acceso abierto full-admin**. Login stub en `/login` con banner explicativo. |
-| 10 | **Supabase del proyecto** | ✅ Cerrada | Proyecto `cwcvurrkqwifpngzecxu` (org `ydxsdlwjuonbgvxmsihp`). 5 migraciones aplicadas (22 tablas + 2 vistas materializadas + función `refresh_kpi_views`). URL + anon key configuradas en Netlify env. ⚠️ **RLS desactivado en todas las tablas** (intencional hasta SSO; el deploy está protegido por contraseña de Netlify así que el anon key no es público). Service role key pendiente de pegar para que escrituras + crons funcionen. |
+| 10 | **Supabase del proyecto** | ✅ Cerrada | Proyecto `cwcvurrkqwifpngzecxu` (org `ydxsdlwjuonbgvxmsihp`). 5 migraciones aplicadas (22 tablas + 2 vistas materializadas + función `refresh_kpi_views`). URL + anon key + **service_role** configuradas en Netlify env (esta última como secret). ⚠️ **RLS desactivado en todas las tablas** (intencional hasta SSO; el deploy está protegido por contraseña de Netlify así que el anon key no es público). Escrituras y crons operativos. |
 
 ## Estado de la implementación
 
