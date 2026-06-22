@@ -1,0 +1,18 @@
+# Netlify config — proyecto dcycle-mkt-gtm-revenue-tracking-tool (team Dcycle, Pro)
+# El runtime de Next.js de Netlify detecta el framework automáticamente.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Deploy de ramas: cada branch deploy obtiene su propia URL
+# (p.ej. claude-beautiful-babbage-ugrg1y--dcycle-mkt-gtm-revenue-tracking-tool.netlify.app)
+# para que el equipo de Ops revise sin tocar `main`.
+[context.branch-deploy]
+  command = "npm run build"
+
+[context.deploy-preview]
+  command = "npm run build"
