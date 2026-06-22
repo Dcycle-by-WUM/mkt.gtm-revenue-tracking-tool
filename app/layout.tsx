@@ -8,21 +8,21 @@ export const metadata: Metadata = {
     "Unifica paid media (LinkedIn + Google) con resultados de CRM (HubSpot) y orgánico/AEO.",
 };
 
-// Navegación = pantallas del brief §8. Las marcadas como `phase` aún no están
-// implementadas (stubs) para que Ops vea el alcance completo de la herramienta.
-const nav: { href: string; label: string; phase?: string }[] = [
+// Navegación = 13 pantallas del PRD §9. Todas live (algunas con datos de
+// ejemplo mientras no estén los secretos de las fuentes externas).
+const nav: { href: string; label: string; aside?: string }[] = [
   { href: "/", label: "Overview — Cómo vamos" },
   { href: "/paid", label: "Paid Media Performance" },
-  { href: "/campaign-detail", label: "Campaign Detail", phase: "F2" },
-  { href: "/forecast", label: "Pipeline & Forecast", phase: "F3" },
-  { href: "/explorer", label: "Explorer (pivot)", phase: "F2" },
-  { href: "/abm-accounts", label: "ABM — Cuentas", phase: "F4" },
-  { href: "/abm-timeline", label: "ABM — Account Timeline", phase: "F4" },
-  { href: "/abm-heat", label: "ABM — Heat Score", phase: "F4" },
-  { href: "/abm-sdr", label: "ABM — por SDR", phase: "F4" },
-  { href: "/organic", label: "Orgánico (SEO) + AEO", phase: "F5" },
+  { href: "/campaign-detail", label: "Campaign Detail" },
+  { href: "/forecast", label: "Pipeline & Forecast" },
+  { href: "/explorer", label: "Explorer (pivot)" },
+  { href: "/abm-accounts", label: "ABM — Cuentas" },
+  { href: "/abm-timeline", label: "ABM — Account Timeline" },
+  { href: "/abm-heat", label: "ABM — Heat Score" },
+  { href: "/abm-sdr", label: "ABM — por SDR" },
+  { href: "/organic", label: "Orgánico (SEO) + AEO" },
   { href: "/data-health", label: "Data Health" },
-  { href: "/admin", label: "Admin / Settings", phase: "F2" },
+  { href: "/admin", label: "Admin / Settings" },
 ];
 
 export default function RootLayout({
@@ -49,14 +49,21 @@ export default function RootLayout({
                   className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text)] hover:bg-white/5"
                 >
                   <span>{item.label}</span>
-                  {item.phase && (
+                  {item.aside && (
                     <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
-                      {item.phase}
+                      {item.aside}
                     </span>
                   )}
                 </Link>
               ))}
             </nav>
+
+            <div className="mt-8 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-200">
+              Acceso <strong>abierto</strong> (sin SSO todavía).
+              <Link href="/login" className="block underline mt-1">
+                Detalles de auth →
+              </Link>
+            </div>
           </aside>
           <main className="flex-1 p-8">{children}</main>
         </div>

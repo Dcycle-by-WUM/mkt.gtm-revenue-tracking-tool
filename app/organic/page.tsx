@@ -1,9 +1,9 @@
 import { PageHeader } from "@/components/Page";
 import { StatusBanner } from "@/components/StatusBanner";
-import { mockSeoKpis, mockAeoKpis } from "@/lib/mock-data";
+import { getSeoKpis, getAeoKpis, type OrganicKpi } from "@/lib/data/organic";
 
-// Orgánico (SEO) + AEO — Brief §10.
-function KpiTable({ rows }: { rows: { kpi: string; value: string; source: string }[] }) {
+// Orgánico (SEO) + AEO — PRD §11.
+function KpiTable({ rows }: { rows: OrganicKpi[] }) {
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--border)]">
       <table className="w-full text-sm">
@@ -28,23 +28,28 @@ function KpiTable({ rows }: { rows: { kpi: string; value: string; source: string
   );
 }
 
-export default function OrganicPage() {
+export default async function OrganicPage() {
+  // Mes actual por defecto.
+  const month = new Date().toISOString().slice(0, 7);
+  const [seo, aeo] = await Promise.all([getSeoKpis(month), getAeoKpis(month)]);
+
   return (
     <div>
       <PageHeader
         title="Orgánico (SEO) + AEO"
         subtitle="SEO non-branded, Domain Authority, keywords en Top 3, y AEO (AI Visibility / Share of Voice), conectados hasta pipeline € y deals."
-        phase="F5"
       />
       <StatusBanner />
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-        SEO orgánico
-      </h2>
-      <KpiTable rows={mockSeoKpis} />
-      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-        AEO — Answer Engine Optimization
-      </h2>
-      <KpiTable rows={mockAeoKpis} />
+      <p className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+        Fuentes externas (DA: Moz/Ahrefs/Semrush · AI-visibility: Profound/Peec/Otterly/Semrush AI) están "on hold"
+        en <code>docs/DECISIONES.md</code>. El modelo y las pantallas ya están en su sitio: se enchufan en cuanto
+        se decida la herramienta.
+      </p>
+
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">SEO orgánico</h2>
+      <KpiTable rows={seo} />
+      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">AEO — Answer Engine Optimization</h2>
+      <KpiTable rows={aeo} />
     </div>
   );
 }

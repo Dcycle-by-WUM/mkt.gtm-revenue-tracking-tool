@@ -81,9 +81,10 @@ export function filterCampaigns(rows: CampaignRow[], f: Filters): CampaignRow[] 
 
 export const countriesOf = (rows: CampaignRow[]) => [...new Set(rows.map((r) => r.country))].sort();
 
-// ── Overrides de país (editables desde Explorer, §7.4) ─────────
-export const OVERRIDES_KEY = "gtm.countryOverrides.v1";
-export type CountryOverrides = Record<string, string>; // campaign -> country
+// ── Overrides de país (PRD §8.2) ──────────────────────────────
+// Mapa { campaña (o patrón) → país }. Se aplica encima de los datos vengan
+// de mock o de Supabase. Persistencia real en `country_overrides` (Postgres).
+export type CountryOverrides = Record<string, string>;
 export function applyOverrides(rows: CampaignRow[], ov: CountryOverrides): CampaignRow[] {
   return rows.map((r) => (ov[r.campaign] ? { ...r, country: ov[r.campaign] } : r));
 }
