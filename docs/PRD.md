@@ -10,7 +10,7 @@
 > | **Producto** | `mkt.gtm-revenue-tracking-tool` |
 > | **Equipo / hosting** | Dcycle · Netlify (Pro) + Supabase |
 > | **Proyecto Netlify** | `dcycle-mkt-gtm-revenue-tracking-tool` (site ID `170e45ec-0ac4-4b40-a067-0f1a0d995ff3`) |
-> | **Estado** | F0 (scaffolding) ✅ · camino Paid en curso · CRM/ABM/SEO pendientes de credenciales |
+> | **Estado** | App construida (13 pantallas live) ✅ · ingesta y persistencia esperando credenciales en env vars |
 > | **Última actualización** | 2026-06-22 |
 >
 > Documentos relacionados: [`BRIEF.md`](BRIEF.md) (brief funcional+técnico completo) ·
@@ -223,24 +223,26 @@ Todas las divisiones están protegidas contra 0 (devuelven `null` → se muestra
 
 ## 9. Pantallas (arquitectura de información)
 
-13 pantallas. La columna **Estado** refleja el código actual: *Live* = funcional con datos de
-ejemplo; *Stub Fx* = navegable pero marcada como pendiente de la fase indicada.
+13 pantallas, todas **Live** (Server Component → Client Component con Server
+Actions para escrituras). Cuando una fuente externa todavía no tiene
+credenciales, la pantalla muestra datos de ejemplo + un aviso, pero la UI y
+las queries son las definitivas.
 
-| # | Pantalla | Propósito | Estado |
-|---|---|---|---|
-| 1 | **Login (SSO)** | Entrada por Google Workspace; rol al entrar | Pendiente (requiere Supabase Auth) |
-| 2 | **Overview "Cómo vamos"** (`/`) | North-star: Spend, Leads, MQL, SQL, Pipeline €, Closed Won, ROI por canal; real vs objetivo + alertas; filtros globales | **Live** |
-| 3 | **Paid Media Performance** (`/paid`) | Tabla canal × campaña con todas las métricas; LinkedIn vs Google; tendencia | **Live** |
-| 4 | **Campaign Detail** (`/campaign-detail`) | Spend timeline, embudo, contactos cruzados, estado de matching UTM, grupo/país, notas | Stub F2 |
-| 5 | **Pipeline & Forecast** (`/forecast`) | Forecast manual por canal/mes/país; real desde HubSpot; % cumplimiento, pacing | Stub F3 |
-| 6 | **Explorer / pivot** (`/explorer`) | Pivotar cualquier métrica por Canal/Campaña/País/Mes; vistas guardadas; notas | Stub F2 |
-| 7 | **ABM — Cuentas** (`/abm-accounts`) | Cuentas-objetivo: estado, Heat Score, última actividad, SDR, ¿impactada por ads? | Stub F4 |
-| 8 | **ABM — Account Timeline** (`/abm-timeline`) | Secuencia de eventos por empresa (engagements + deals) + impacto de paid | Stub F4 |
-| 9 | **ABM — Heat Score** (`/abm-heat`) | Ranking pre-demo con desglose por señal; alerta SDR para 🔥 | Stub F4 (algoritmo ya en `lib/heat.ts`) |
-| 10 | **ABM — por SDR** (`/abm-sdr`) | Cada SDR vs sus cuentas (`Contact owner`) | Stub F4 |
-| 11 | **Orgánico (SEO) + AEO** (`/organic`) | KPIs SEO + AEO conectados a pipeline € | Stub F5 |
-| 12 | **Data Health** (`/data-health`) | Frescura de sync por fuente; colas de UTMs sin match / sin país; etiquetado manual; edición de alias y overrides | **Live** |
-| 13 | **Admin / Settings** (`/admin`) | Usuarios/roles, conexiones, definiciones editables, objetivos | Stub F2 |
+| # | Pantalla | Propósito |
+|---|---|---|
+| 1 | **Login** (`/login`) | Stub informativo; SSO Google Workspace cuando lleguen OAuth credentials. Acceso abierto mientras tanto. |
+| 2 | **Overview "Cómo vamos"** (`/`) | North-star: Spend, Leads, MQL, SQL, Pipeline €, Closed Won, ROI; filtros globales; pivot multi-dimensión. |
+| 3 | **Paid Media Performance** (`/paid`) | Tabla canal × campaña con todas las métricas (CTR/CPC/CPM/CPL/…); notas persistidas. |
+| 4 | **Campaign Detail** (`/campaign-detail`) | Spend timeline, embudo, etiquetas editables por campaña (Webinar/MOFU…) con rollup por etiqueta. |
+| 5 | **Pipeline & Forecast** (`/forecast`) | Objetivos editables por canal/mes/país (Supabase). Real calculado del dataset; pacing. |
+| 6 | **Explorer / pivot** (`/explorer`) | Pivot libre + cola de campañas sin país. Cada override se guarda como `country_overrides`. |
+| 7 | **ABM — Cuentas** (`/abm-accounts`) | Cuentas con Heat Score, ads impact, última actividad. Edita ABM/SDR/notas. |
+| 8 | **ABM — Account Timeline** (`/abm-timeline`) | Secuencia de eventos por empresa (HubSpot activities) + ads impact overlay. Selector navegable. |
+| 9 | **ABM — Heat Score** (`/abm-heat`) | Ranking pre-demo con desglose por señal. Lee `heat_scores` precalculados; fallback a runtime. |
+| 10 | **ABM — por SDR** (`/abm-sdr`) | Cada SDR vs sus cuentas (`Contact owner`) + count de leads 🔥. |
+| 11 | **Orgánico (SEO) + AEO** (`/organic`) | KPIs SEO non-branded + AEO conectados a pipeline €. Banner de F5 on hold para herramienta concreta. |
+| 12 | **Data Health** (`/data-health`) | Frescura de sync (`sync_runs`) + cola de UTMs sin match + cola de países por asignar. |
+| 13 | **Admin / Settings** (`/admin`) | Conexiones reales, definiciones de negocio, objetivos activos, **editor de pesos del Heat Score versionado**. |
 
 ---
 
@@ -288,38 +290,47 @@ desde IA** (`original_source = AI_REFERRALS`), y métricas de **Bing** (alimenta
 
 ## 12. Estado del código (qué está construido hoy)
 
-**F0 (scaffolding) ✅:** Next.js (App Router) + Netlify + navegación de las 13 pantallas + CI
-(typecheck + build en cada push/PR) + despliegue continuo GitHub→Netlify.
+La app está **construida** y desplegándose en Netlify. Lo que falta para que
+los datos sean "vivos" en vez de mock son las **credenciales** de las
+fuentes externas (HubSpot, Supermetrics, Supabase keys, Google OAuth).
 
 | Módulo | Estado |
 |---|---|
 | `lib/kpis.ts` | ✅ Fórmulas de negocio (CTR/CPC/CPM/CPL/CPMQL/CPSQL/ROI/%), null-safe, formateadores ES |
-| `lib/heat.ts` | ✅ Heat Score completo (recencia, señales, bandas, elegibilidad); `NOW` fijo para preview determinista |
-| `lib/config.ts` | ✅ Detección de integraciones vivas por env var |
-| `lib/store.ts` | ✅ Estado en `localStorage` para el prototipo (notas/forecast/overrides) — se reemplaza por Supabase |
-| `lib/mock-data.ts` | ✅ Datos de ejemplo para las pantallas live |
-| `lib/supermetrics.ts` | 🟡 **Esqueleto**: construye la request a Supermetrics, pero el mapeo del payload es `TODO` hasta tener token + validar `field_discovery` |
-| `supabase/migrations/0001_paid_core.sql` | ✅ Esquema del camino paid; CRM pendiente de HubSpot |
-| Pantallas live | ✅ Overview, Paid Media Performance, Data Health (con datos de ejemplo) |
-| Resto de pantallas | 🟡 Stubs marcados por fase (F2–F5) |
+| `lib/heat.ts` | ✅ Heat Score completo (recencia, señales, bandas, elegibilidad) |
+| `lib/matching.ts` | ✅ Normalización UTM + matching en cascada (exact → alias → manual → fuzzy → cola) |
+| `lib/country.ts` | ✅ Atribución de país (LinkedIn por grupo, Google sufijos, overrides) |
+| `lib/config.ts` | ✅ Detección de integraciones vivas + flag `FORCE_MOCK` |
+| `lib/supabase/{client,admin,types}.ts` | ✅ Cliente tipado anon + service role + tipos del schema |
+| `lib/data/*.ts` | ✅ Fachada de lectura por dominio con fallback a mock cuando Supabase no está vivo |
+| `lib/supermetrics.ts` | ✅ Mapeo defensivo del payload LIA + AW; arranca con token |
+| `lib/hubspot.ts` | ✅ Adaptador Private App (contacts/deals/companies/engagements + scopes mínimos) |
+| `lib/mock-data.ts` | ✅ Dataset de fallback (no se enseña al usuario cuando Supabase está vivo) |
+| `supabase/migrations/0001..0005` | ✅ Schema completo: paid + CRM/ABM + app-native (targets/notes/utm_manual_tags/heat_weights) + vistas materializadas KPI + orgánico/AEO |
+| `netlify/functions/sync-paid.ts` | ✅ Scheduled diario; ventana de 14 días; upsert idempotente; refresca vistas |
+| `netlify/functions/sync-crm.ts` | ✅ Scheduled horario; HubSpot → contacts/deals/companies/activities |
+| `netlify/functions/compute-heat.ts` | ✅ Scheduled cada 2h; recalcula `heat_scores` con pesos activos |
+| `app/actions.ts` | ✅ Server Actions para escrituras (overrides, notes, targets, tags, accounts, heat weights) |
+| Pantallas (1–13) | ✅ Todas live (PRD §9); todas Server Component → Client con Server Actions |
 
-**Variables de entorno** (`.env.example`): `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPERMETRICS_API_KEY`,
-`SUPERMETRICS_TEAM_ID`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
-`HUBSPOT_PRIVATE_APP_TOKEN`.
+**Variables de entorno** (`.env.example`):
+- **Supabase:** `NEXT_PUBLIC_SUPABASE_URL` (ya rellenada, no es secreta), `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+- **Supermetrics:** `SUPERMETRICS_API_KEY`, `SUPERMETRICS_TEAM_ID`.
+- **HubSpot:** `HUBSPOT_PRIVATE_APP_TOKEN` (se conecta una vez la app esté construida).
+- **Google SSO:** `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`.
+- **Operativa:** `FORCE_MOCK=true` para forzar fallback a mock en cualquier deploy.
 
 ---
 
 ## 13. Roadmap por fases
 
-- **F0 — Scaffolding** ✅: Next.js + Supabase + Netlify; SSO Google; migraciones; CI.
-- **F1 — Ingesta + motor:** Supermetrics → `ad_spend_daily` (LinkedIn por **grupo** + Google);
-  HubSpot → contacts/deals/companies/activities; normalización + matching + país + colas de
-  calidad + etiquetado manual.
-- **F2 — Core analytics:** Overview, Paid Performance, Campaign Detail, Explorer, Data Health, Admin.
-- **F3 — Objetivos + Notas.**
-- **F4 — ABM:** Cuentas, Timeline, SDR, Paid↔ABM, Heat Score (incl. ingesta Companies Engagement Report).
-- **F5 — Orgánico (SEO) + AEO.**
+- **F0 — Scaffolding** ✅: Next.js + Supabase + Netlify; migraciones; CI.
+- **F1 — Ingesta + motor** ✅ código; ⏳ credenciales para activar los crons.
+- **F2 — Core analytics** ✅: Overview, Paid, Campaign Detail, Explorer, Data Health, Admin.
+- **F3 — Objetivos + Notas** ✅: persisten en Supabase con autor/fecha.
+- **F4 — ABM** ✅: Cuentas, Timeline, SDR, Heat Score (editable desde Admin); ingesta Companies Engagement Report en `compute-heat.ts`.
+- **F5 — Orgánico (SEO) + AEO** ✅ código + pantalla; ⏸️ herramienta concreta (DA / AI-visibility) on hold en `DECISIONES.md`.
+- **F6 — SSO Google Workspace** ⏳: roles vía RLS de Supabase cuando entren los OAuth credentials.
 
 ---
 
