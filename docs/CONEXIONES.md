@@ -9,6 +9,33 @@ Qué conectar, **con qué credenciales**, **qué campos exactos** y **dónde aca
 
 ---
 
+## 0. Despliegue continuo (GitHub → Netlify) ⚙️
+
+Conecta el repositorio al proyecto de Netlify para que **cada push/merge dispare un deploy automático**, en lugar de subidas manuales por API.
+
+- **Proyecto Netlify:** `dcycle-mkt-gtm-revenue-tracking-tool` (team **Dcycle**, Pro)
+  - Site ID: `170e45ec-0ac4-4b40-a067-0f1a0d995ff3`
+  - Panel: <https://app.netlify.com/projects/dcycle-mkt-gtm-revenue-tracking-tool>
+- **Repositorio:** `Dcycle-by-WUM/mkt.gtm-revenue-tracking-tool`
+
+**Pasos (UI de Netlify — lo hace un owner del team, una sola vez):**
+
+1. Netlify → proyecto → **Project configuration → Build & deploy → Continuous deployment**.
+2. En **Repository**, pulsa **Link repository** → **GitHub** y autoriza la **Netlify GitHub App** sobre la org `Dcycle-by-WUM` (basta dar acceso solo a este repo).
+3. Selecciona el repo `mkt.gtm-revenue-tracking-tool`.
+4. Confirma los build settings (ya vienen de [`netlify.toml`](../netlify.toml)):
+   - **Production branch:** `main`
+   - **Build command:** `npm run build`
+   - **Publish directory:** `.next`
+   - **Node version:** `20` (fijada vía `NODE_VERSION` en `netlify.toml`)
+5. Guarda. A partir de ahí: `main` → **producción**; cada rama → su **branch deploy** propio; cada PR → **deploy preview**.
+
+> ⚠️ La autorización de la GitHub App es un paso de UI (OAuth) que **no se puede
+> automatizar** por API/token. El repo ya está preparado para que, una vez
+> enlazado, los builds sean reproducibles (misma versión de Node que CI).
+
+---
+
 ## 🧠 La lógica en 1 minuto
 
 El **pegamento** entre el gasto (Ads) y los resultados (CRM) es el **`utm_campaign`**:
