@@ -2,6 +2,8 @@ import { PageHeader } from "@/components/Page";
 import { StatusBanner } from "@/components/StatusBanner";
 import { listHeatRanking } from "@/lib/data/contacts";
 
+export const dynamic = "force-dynamic";
+
 // ABM — Heat Score — PRD §9 (9).
 export default async function AbmHeatPage() {
   const ranked = await listHeatRanking();

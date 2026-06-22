@@ -3,6 +3,8 @@ import { StatusBanner } from "@/components/StatusBanner";
 import { listAccounts } from "@/lib/data/accounts";
 import { listHeatRanking } from "@/lib/data/contacts";
 
+export const dynamic = "force-dynamic";
+
 // ABM — Overview por SDR — PRD §9 (10). Cada SDR vs sus cuentas (`Contact owner`).
 export default async function AbmSdrPage() {
   const [accounts, heat] = await Promise.all([listAccounts(), listHeatRanking()]);

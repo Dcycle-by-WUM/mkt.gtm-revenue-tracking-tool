@@ -4,6 +4,8 @@ import { listCampaigns } from "@/lib/data/campaigns";
 import { listTargets } from "@/lib/data/targets";
 import { ForecastClient } from "./forecast-client";
 
+export const dynamic = "force-dynamic";
+
 // Pipeline & Forecast vs Objetivos — PRD §9 (5).
 export default async function ForecastPage() {
   const [campaigns, targets] = await Promise.all([listCampaigns(), listTargets()]);

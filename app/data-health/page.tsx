@@ -3,6 +3,8 @@ import { getSourceHealth } from "@/lib/data/source-health";
 import { listUnmatchedUtms } from "@/lib/matching";
 import { mockUnmatchedUtms, mockMissingCountry } from "@/lib/mock-data";
 
+export const dynamic = "force-dynamic";
+
 // Data Health — PRD §9 (12). Estado de las fuentes + colas de calidad.
 const BADGE: Record<string, string> = {
   ok: "bg-emerald-500/15 text-emerald-300",

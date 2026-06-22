@@ -4,6 +4,8 @@ import { listCampaigns } from "@/lib/data/campaigns";
 import { listCountryOverrides } from "@/lib/data/overrides";
 import { ExplorerClient } from "./explorer-client";
 
+export const dynamic = "force-dynamic";
+
 // Explorer / Desglose libre — PRD §9 (6).
 export default async function ExplorerPage() {
   const [campaigns, overrides] = await Promise.all([

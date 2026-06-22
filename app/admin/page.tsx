@@ -5,6 +5,8 @@ import { listTargets } from "@/lib/data/targets";
 import { HeatWeightsEditor } from "./admin-client";
 import { fmtEur } from "@/lib/kpis";
 
+export const dynamic = "force-dynamic";
+
 // Admin / Settings — PRD §9 (13).
 function Conn({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (
