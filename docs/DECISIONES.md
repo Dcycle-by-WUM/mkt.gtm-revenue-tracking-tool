@@ -14,6 +14,7 @@ Estado de las decisiones abiertas del Brief §12 / Racional §K. Leyenda: ✅ ce
 | 8 | **HubSpot API key** | ✅ Cerrada | Token configurado en Netlify env (Álvaro Granados, 22-jun). Cron `sync-crm.ts` arranca en el próximo deploy. |
 | 9 | **SSO Google Workspace** | ⏳ Pendiente | Se enchufa después de que la app esté en producción. Mientras tanto, **acceso abierto full-admin**. Login stub en `/login` con banner explicativo. |
 | 10 | **Supabase del proyecto** | ✅ Cerrada | Proyecto `cwcvurrkqwifpngzecxu` (org `ydxsdlwjuonbgvxmsihp`). 5 migraciones aplicadas (22 tablas + 2 vistas materializadas + función `refresh_kpi_views`). URL + anon key + **service_role** configuradas en Netlify env (esta última como secret). ⚠️ **RLS desactivado en todas las tablas** (intencional hasta SSO; el deploy está protegido por contraseña de Netlify así que el anon key no es público). Escrituras y crons operativos. |
+| 11 | **ABM (4 pantallas)** | ⏸️ On hold | Decisión de negocio (22-jun). Las 4 pantallas (`/abm-accounts`, `/abm-timeline`, `/abm-heat`, `/abm-sdr`) están marcadas con banner "ON HOLD" en la UI y etiqueta en sidebar. El cron `compute-heat` queda neutralizado (sale temprano salvo que `ABM_ENABLED=true`). Modelo de datos (`accounts`, `heat_scores`, `linkedin_company_engagement`, `activities`) y código se mantienen para retomar sin coste cuando se reactive. |
 
 ## Estado de la implementación
 

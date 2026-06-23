@@ -8,18 +8,18 @@ export const metadata: Metadata = {
     "Unifica paid media (LinkedIn + Google) con resultados de CRM (HubSpot) y orgánico/AEO.",
 };
 
-// Navegación = 13 pantallas del PRD §9. Todas live (algunas con datos de
-// ejemplo mientras no estén los secretos de las fuentes externas).
-const nav: { href: string; label: string; aside?: string }[] = [
+// Navegación = 13 pantallas del PRD §9. ABM (4 pantallas) está en pausa
+// hasta nueva orden de negocio — se mantiene accesible pero etiquetado.
+const nav: { href: string; label: string; status?: "onhold" }[] = [
   { href: "/", label: "Overview — Cómo vamos" },
   { href: "/paid", label: "Paid Media Performance" },
   { href: "/campaign-detail", label: "Campaign Detail" },
   { href: "/forecast", label: "Pipeline & Forecast" },
   { href: "/explorer", label: "Explorer (pivot)" },
-  { href: "/abm-accounts", label: "ABM — Cuentas" },
-  { href: "/abm-timeline", label: "ABM — Account Timeline" },
-  { href: "/abm-heat", label: "ABM — Heat Score" },
-  { href: "/abm-sdr", label: "ABM — por SDR" },
+  { href: "/abm-accounts", label: "ABM — Cuentas", status: "onhold" },
+  { href: "/abm-timeline", label: "ABM — Account Timeline", status: "onhold" },
+  { href: "/abm-heat", label: "ABM — Heat Score", status: "onhold" },
+  { href: "/abm-sdr", label: "ABM — por SDR", status: "onhold" },
   { href: "/organic", label: "Orgánico (SEO) + AEO" },
   { href: "/data-health", label: "Data Health" },
   { href: "/admin", label: "Admin / Settings" },
@@ -46,12 +46,14 @@ export default function RootLayout({
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-[var(--text)] hover:bg-white/5"
+                  className={`flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-white/5 ${
+                    item.status === "onhold" ? "text-[var(--muted)]" : "text-[var(--text)]"
+                  }`}
                 >
                   <span>{item.label}</span>
-                  {item.aside && (
-                    <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
-                      {item.aside}
+                  {item.status === "onhold" && (
+                    <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                      On hold
                     </span>
                   )}
                 </Link>

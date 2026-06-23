@@ -1,4 +1,4 @@
-import { PageHeader, Panel } from "@/components/Page";
+import { PageHeader, Panel, OnHoldBanner } from "@/components/Page";
 import { StatusBanner } from "@/components/StatusBanner";
 import { listAccounts } from "@/lib/data/accounts";
 import { listHeatRanking } from "@/lib/data/contacts";
@@ -16,6 +16,7 @@ export default async function AbmSdrPage() {
         title="ABM — Overview por SDR"
         subtitle="Cada SDR frente a sus cuentas asignadas (Contact owner): estado, última actividad y leads calientes."
       />
+      <OnHoldBanner area="ABM" />
       <StatusBanner />
       <div className="grid gap-6 lg:grid-cols-2">
         {sdrs.map((sdr) => {
