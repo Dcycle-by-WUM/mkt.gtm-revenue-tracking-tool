@@ -236,10 +236,10 @@ las queries son las definitivas.
 | 4 | **Campaign Detail** (`/campaign-detail`) | Spend timeline, embudo, etiquetas editables por campaña (Webinar/MOFU…) con rollup por etiqueta. |
 | 5 | **Pipeline & Forecast** (`/forecast`) | Objetivos editables por canal/mes/país (Supabase). Real calculado del dataset; pacing. |
 | 6 | **Explorer / pivot** (`/explorer`) | Pivot libre + cola de campañas sin país. Cada override se guarda como `country_overrides`. |
-| 7 | **ABM — Cuentas** (`/abm-accounts`) | Cuentas con Heat Score, ads impact, última actividad. Edita ABM/SDR/notas. |
-| 8 | **ABM — Account Timeline** (`/abm-timeline`) | Secuencia de eventos por empresa (HubSpot activities) + ads impact overlay. Selector navegable. |
-| 9 | **ABM — Heat Score** (`/abm-heat`) | Ranking pre-demo con desglose por señal. Lee `heat_scores` precalculados; fallback a runtime. |
-| 10 | **ABM — por SDR** (`/abm-sdr`) | Cada SDR vs sus cuentas (`Contact owner`) + count de leads 🔥. |
+| 7 | **ABM — Cuentas** (`/abm-accounts`) ⏸️ on hold | Cuentas con Heat Score, ads impact, última actividad. Edita ABM/SDR/notas. |
+| 8 | **ABM — Account Timeline** (`/abm-timeline`) ⏸️ on hold | Secuencia de eventos por empresa (HubSpot activities) + ads impact overlay. Selector navegable. |
+| 9 | **ABM — Heat Score** (`/abm-heat`) ⏸️ on hold | Ranking pre-demo con desglose por señal. Lee `heat_scores` precalculados; fallback a runtime. |
+| 10 | **ABM — por SDR** (`/abm-sdr`) ⏸️ on hold | Cada SDR vs sus cuentas (`Contact owner`) + count de leads 🔥. |
 | 11 | **Orgánico (SEO) + AEO** (`/organic`) | KPIs SEO non-branded + AEO conectados a pipeline €. Banner de F5 on hold para herramienta concreta. |
 | 12 | **Data Health** (`/data-health`) | Frescura de sync (`sync_runs`) + cola de UTMs sin match + cola de países por asignar. |
 | 13 | **Admin / Settings** (`/admin`) | Conexiones reales, definiciones de negocio, objetivos activos, **editor de pesos del Heat Score versionado**. |

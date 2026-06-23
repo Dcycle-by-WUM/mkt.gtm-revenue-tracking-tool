@@ -1,4 +1,4 @@
-import { PageHeader } from "@/components/Page";
+import { PageHeader, OnHoldBanner } from "@/components/Page";
 import { StatusBanner } from "@/components/StatusBanner";
 import { listHeatRanking } from "@/lib/data/contacts";
 
@@ -13,6 +13,7 @@ export default async function AbmHeatPage() {
         title="ABM — Heat Score / Señales de intención"
         subtitle="Ranking pre-demo (señales × recencia, §10). Pesos y umbrales configurables en Admin. 🔥≥70 · ⚡≥50 · 🌱≥30 · ❄️<30."
       />
+      <OnHoldBanner area="ABM" />
       <StatusBanner />
       <div className="space-y-4">
         {ranked.map(({ contact, eligible, heat }) => (

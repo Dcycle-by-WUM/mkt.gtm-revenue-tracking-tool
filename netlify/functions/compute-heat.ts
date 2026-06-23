@@ -32,6 +32,15 @@ function dbToHeat(c: DbContact, liLevel: HeatContact["linkedinEngagement"]): Hea
 }
 
 export default async (): Promise<Response> => {
+  // ABM en pausa por decisión de negocio. El cron sigue desplegado pero
+  // sale temprano sin tocar la DB hasta que se reactive (pon ABM_ENABLED=true).
+  if (process.env.ABM_ENABLED !== "true") {
+    return new Response(
+      JSON.stringify({ ok: true, skipped: true, reason: "ABM on hold" }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   const sb = requireSupabaseAdmin();
 
   const { data: contacts } = await sb.from("contacts").select("*");

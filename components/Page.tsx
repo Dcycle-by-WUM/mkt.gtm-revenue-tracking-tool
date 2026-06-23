@@ -20,6 +20,20 @@ export function PageHeader({
   );
 }
 
+// Banner para pantallas en pausa de negocio. La sección se mantiene
+// accesible (modelo de datos, código, queries) pero se avisa al usuario
+// de que no está activa.
+export function OnHoldBanner({ area }: { area: string }) {
+  return (
+    <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+      <strong className="uppercase tracking-wide">On hold</strong> · {area} está en pausa
+      por decisión de negocio. La pantalla y el modelo de datos siguen
+      funcionando para futuras iteraciones, pero el equipo no está priorizando
+      esta área ahora mismo.
+    </div>
+  );
+}
+
 export function Panel({
   title,
   children,
