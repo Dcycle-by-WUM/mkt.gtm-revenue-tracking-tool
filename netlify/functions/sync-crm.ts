@@ -122,15 +122,19 @@ export default async (): Promise<Response> => {
     .map((s) => s.error)
     .filter(Boolean) as string[];
 
-  // Refresca vistas materializadas — best effort.
-  try {
-    const sb = requireSupabaseAdmin();
-    await sb.rpc("refresh_kpi_views");
-  } catch (e) {
-    console.error(`[sync-crm] refresh_kpi_views failed: ${e instanceof Error ? e.message : e}`);
-  }
-
   const ok = errors.length === 0;
+
+  // Solo refrescar vistas si contacts y deals se sincronizaron sin errores.
+  if (!contacts.error && !deals.error) {
+    try {
+      const sb = requireSupabaseAdmin();
+      await sb.rpc("refresh_kpi_views");
+    } catch (e) {
+      console.error(`[sync-crm] refresh_kpi_views failed: ${e instanceof Error ? e.message : e}`);
+    }
+  } else {
+    console.warn(`[sync-crm] skipped refresh_kpi_views — contacts or deals had errors`);
+  }
   await finishRun(run.id, ok, total);
 
   console.log(`[sync-crm] done ok=${ok} total=${total} errors=${errors.length}`);

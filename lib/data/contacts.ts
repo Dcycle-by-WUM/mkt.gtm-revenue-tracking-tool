@@ -37,11 +37,7 @@ function fromDb(c: DbContact): HeatContact {
 
 export async function listHeatRanking(): Promise<HeatRanked[]> {
   const sb = getSupabase();
-  if (!sb) {
-    return mockHeatContacts
-      .map((c) => ({ contact: c, eligible: isEligible(c), heat: computeHeat(c) }))
-      .sort((a, b) => b.heat.score - a.heat.score);
-  }
+  if (!sb) return [];
 
   // Si hay heat_scores precalculados, los usamos; si no, calculamos en runtime.
   const { data: scored } = await sb
@@ -69,11 +65,6 @@ export async function listHeatRanking(): Promise<HeatRanked[]> {
 
   const { data: contacts } = await sb.from("contacts").select("*").limit(500);
   const mapped = (contacts ?? []).map((c) => fromDb(c as DbContact));
-  if (mapped.length === 0) {
-    return mockHeatContacts
-      .map((c) => ({ contact: c, eligible: isEligible(c), heat: computeHeat(c) }))
-      .sort((a, b) => b.heat.score - a.heat.score);
-  }
   return mapped
     .map((c) => ({ contact: c, eligible: isEligible(c), heat: computeHeat(c) }))
     .sort((a, b) => b.heat.score - a.heat.score);
