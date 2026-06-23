@@ -7,7 +7,10 @@ import type { HeatContact } from "./heat";
 
 export const IS_MOCK = true;
 
-export type Channel = "LinkedIn" | "Google";
+// "Otros" cubre los buckets sin paid (orgánico, direct, AI referrals, offline)
+// que entran via `hs_analytics_source`. Cuando llegue Supermetrics y los
+// contactos vengan ya cruzados con campaña, este bucket residual se reduce.
+export type Channel = "LinkedIn" | "Google" | "Otros";
 
 export type CampaignRow = ChannelMetrics & {
   channel: Channel;
@@ -17,9 +20,15 @@ export type CampaignRow = ChannelMetrics & {
   month: string; // YYYY-MM
 };
 
+// Meses base — usados solo cuando no hay datos reales aún. La UI prefiere
+// derivar los meses del dataset real (ver `monthsOf` en lib/mock-data).
 export const MONTHS = ["2026-04", "2026-05", "2026-06"] as const;
-export const CHANNELS: Channel[] = ["LinkedIn", "Google"];
+export const CHANNELS: Channel[] = ["LinkedIn", "Google", "Otros"];
 export const NO_COUNTRY = "Sin país / Multi";
+
+/** Lista ordenada de meses presentes en un dataset (YYYY-MM ascendente). */
+export const monthsOf = (rows: CampaignRow[]): string[] =>
+  [...new Set(rows.map((r) => r.month))].sort();
 
 type BaseCampaign = Omit<CampaignRow, "month">;
 

@@ -5,7 +5,7 @@ import { Panel } from "@/components/Page";
 import { FilterBar } from "@/components/FilterBar";
 import { PivotTable } from "@/components/PivotTable";
 import {
-  filterCampaigns, countriesOf, emptyFilters, NO_COUNTRY,
+  filterCampaigns, countriesOf, monthsOf, emptyFilters, NO_COUNTRY,
   applyOverrides, type CampaignRow, type CountryOverrides,
 } from "@/lib/mock-data";
 import { actionSetCountryOverride, actionClearCountryOverride } from "@/app/actions";
@@ -51,7 +51,13 @@ export function ExplorerClient({
 
   return (
     <>
-      <FilterBar filters={filters} setFilters={setFilters} countries={countriesOf(all)} />
+      <FilterBar
+        filters={filters}
+        setFilters={setFilters}
+        countries={countriesOf(all)}
+        months={monthsOf(all)}
+        channels={[...new Set(all.map((r) => r.channel))].sort()}
+      />
       <PivotTable rows={rows} initialDims={["country"]} />
 
       <div className="mt-8">

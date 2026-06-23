@@ -68,7 +68,13 @@ export function ForecastClient({
 
   return (
     <>
-      <FilterBar filters={filters} setFilters={setFilters} countries={countries} />
+      <FilterBar
+        filters={filters}
+        setFilters={setFilters}
+        countries={countries}
+        months={[...new Set([...rows.map((r) => r.month), ...campaigns.map((c) => c.month)])].sort()}
+        channels={[...new Set([...rows.map((r) => r.channel), ...campaigns.map((c) => c.channel)])].sort()}
+      />
 
       <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full text-sm">

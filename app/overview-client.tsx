@@ -6,6 +6,7 @@ import { PivotTable } from "@/components/PivotTable";
 import {
   filterCampaigns,
   countriesOf,
+  monthsOf,
   sumMetrics,
   emptyFilters,
   type CampaignRow,
@@ -16,6 +17,8 @@ export function OverviewClient({ initial }: { initial: CampaignRow[] }) {
   const [filters, setFilters] = useState(emptyFilters);
   const rows = filterCampaigns(initial, filters);
   const t = sumMetrics(rows);
+  const months = monthsOf(initial);
+  const channels = [...new Set(initial.map((r) => r.channel))].sort();
 
   const cards = [
     { label: "Spend", value: fmtEur(t.spend) },
@@ -31,7 +34,13 @@ export function OverviewClient({ initial }: { initial: CampaignRow[] }) {
 
   return (
     <>
-      <FilterBar filters={filters} setFilters={setFilters} countries={countriesOf(initial)} />
+      <FilterBar
+        filters={filters}
+        setFilters={setFilters}
+        countries={countriesOf(initial)}
+        months={months}
+        channels={channels}
+      />
 
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3">
         {cards.map((c) => (
