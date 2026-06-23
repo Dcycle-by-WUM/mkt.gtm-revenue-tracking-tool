@@ -16,11 +16,11 @@
 
 # Scheduled Functions: jobs de ingesta (PRD §5). El schedule lo declara cada
 # función en su propio `config.schedule`; aquí solo fijamos la carpeta y el
-# runtime Node 22 (consistente con el build).
+# bundler. La versión de Node la fija `NODE_VERSION` en [build.environment]
+# (se aplica también al runtime de Functions, no hace falta repetirla aquí).
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  node_version = "22"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
