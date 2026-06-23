@@ -86,6 +86,24 @@ function deriveMql(leadStatus: string | null): boolean {
 type HsPage<T> = { results: T[]; paging?: { next?: { after: string } } };
 type HsRecord = { id: string; properties: Record<string, string | null> };
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function hsRetry<T>(fn: () => Promise<Response>, label: string): Promise<T> {
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fn();
+    if (res.ok) return (await res.json()) as T;
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      const wait = Math.pow(2, attempt + 1) * 1000;
+      console.warn(`[hubspot] ${label}: 429 rate limit, retrying in ${wait / 1000}s…`);
+      await sleep(wait);
+      continue;
+    }
+    throw new Error(`HubSpot ${label} → ${res.status}: ${await res.text()}`);
+  }
+  throw new Error(`HubSpot ${label}: max retries exceeded`);
+}
+
 async function hsFetch<T>(path: string, qs: Record<string, string | string[]>): Promise<T> {
   const token = requireToken();
   const url = new URL(`${HUBSPOT_BASE}${path}`);
@@ -93,13 +111,12 @@ async function hsFetch<T>(path: string, qs: Record<string, string | string[]>): 
     if (Array.isArray(v)) v.forEach((x) => url.searchParams.append(k, x));
     else url.searchParams.set(k, v);
   }
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-  });
-  if (!res.ok) {
-    throw new Error(`HubSpot ${path} → ${res.status}: ${await res.text()}`);
-  }
-  return (await res.json()) as T;
+  return hsRetry<T>(
+    () => fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    }),
+    path,
+  );
 }
 
 async function pageAll<T>(
@@ -149,15 +166,14 @@ async function searchAll<T>(
   // Hasta 10k resultados por query de search (límite HubSpot).
   for (let i = 0; i < 100; i++) {
     const payload = { ...body, limit: 100, ...(after ? { after } : {}) };
-    const res = await fetch(`${HUBSPOT_BASE}/crm/v3/objects/${objectType}/search`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      throw new Error(`HubSpot search ${objectType} → ${res.status}: ${await res.text()}`);
-    }
-    const page = (await res.json()) as HsPage<T>;
+    const page = await hsRetry<HsPage<T>>(
+      () => fetch(`${HUBSPOT_BASE}/crm/v3/objects/${objectType}/search`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+      `search ${objectType}`,
+    );
     all.push(...page.results);
     after = page.paging?.next?.after;
     if (!after) break;
@@ -251,13 +267,19 @@ async function fetchDealAssociations(
   const result = new Map<string, string>();
   for (let i = 0; i < dealIds.length; i += 100) {
     const batch = dealIds.slice(i, i + 100);
-    const res = await fetch(`${HUBSPOT_BASE}/crm/v3/associations/deals/${toType}/batch/read`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ inputs: batch.map((id) => ({ id })) }),
-    });
-    if (!res.ok) continue;
-    const json = (await res.json()) as { results: { from: { id: string }; to: { id: string }[] }[] };
+    let json: { results: { from: { id: string }; to: { id: string }[] }[] };
+    try {
+      json = await hsRetry<typeof json>(
+        () => fetch(`${HUBSPOT_BASE}/crm/v3/associations/deals/${toType}/batch/read`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ inputs: batch.map((id) => ({ id })) }),
+        }),
+        `associations deals→${toType}`,
+      );
+    } catch {
+      continue;
+    }
     for (const r of json.results ?? []) {
       if (r.to?.[0]?.id) result.set(r.from.id, r.to[0].id);
     }
