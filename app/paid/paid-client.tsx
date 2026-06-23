@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { FilterBar } from "@/components/FilterBar";
 import {
-  filterCampaigns, countriesOf, sumMetrics, emptyMetrics,
+  filterCampaigns, countriesOf, monthsOf, sumMetrics, emptyMetrics,
   emptyFilters, type CampaignRow,
 } from "@/lib/mock-data";
 import { fmtEur, fmtNum, fmtPct, ctr, cpc, cpm, cpl, cpmql, cpsql, roi, type ChannelMetrics } from "@/lib/kpis";
@@ -66,7 +66,13 @@ export function PaidClient({
 
   return (
     <>
-      <FilterBar filters={filters} setFilters={setFilters} countries={countriesOf(initial)} />
+      <FilterBar
+        filters={filters}
+        setFilters={setFilters}
+        countries={countriesOf(initial)}
+        months={monthsOf(initial)}
+        channels={[...new Set(initial.map((r) => r.channel))].sort()}
+      />
 
       <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full text-sm">
