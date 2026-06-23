@@ -8,14 +8,19 @@
   publish = ".next"
 
 [build.environment]
-  # Fijamos Node 20 para que el build de Netlify coincida con CI (.github) y con `engines` (package.json).
-  NODE_VERSION = "20"
+  # Node 22 (afecta a build + runtime de Functions). 22 trae WebSocket nativo,
+  # que necesita @supabase/supabase-js v2 para no romper al instanciar el
+  # cliente. Si bajas a <22 hay que añadir el paquete `ws` y pasarlo como
+  # transport (Supabase no expone esa opción públicamente).
+  NODE_VERSION = "22"
 
 # Scheduled Functions: jobs de ingesta (PRD §5). El schedule lo declara cada
-# función en su propio `config.schedule`; aquí solo fijamos la carpeta.
+# función en su propio `config.schedule`; aquí solo fijamos la carpeta y el
+# runtime Node 22 (consistente con el build).
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+  node_version = "22"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
