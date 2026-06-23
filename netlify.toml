@@ -22,6 +22,9 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+[functions."sync-crm"]
+  timeout = 300
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
