@@ -11,6 +11,8 @@ import {
 } from "@/lib/hubspot";
 import { requireSupabaseAdmin } from "@/lib/supabase/admin";
 
+type StepResult = { fetched: number; upserted: number; error?: string };
+
 async function startedRun(source: string): Promise<{ id: string }> {
   const sb = requireSupabaseAdmin();
   const r = await sb.from("sync_runs").insert({ source, status: "running" }).select("id").single();
@@ -30,15 +32,48 @@ async function finishRun(id: string, ok: boolean, rows: number): Promise<void> {
     .eq("id", id);
 }
 
+// Upsert por lotes con error visible. Si un lote falla, lanza para que el
+// catch del run lo registre y los logs muestren la causa (antes se tragaban).
 async function batchUpsert(
   table: string,
   rows: Record<string, unknown>[],
   conflict: string,
   size = 200,
-): Promise<void> {
+): Promise<number> {
   const sb = requireSupabaseAdmin();
+  let upserted = 0;
   for (let i = 0; i < rows.length; i += size) {
-    await sb.from(table).upsert(rows.slice(i, i + size) as never, { onConflict: conflict });
+    const batch = rows.slice(i, i + size);
+    const { error } = await sb.from(table).upsert(batch as never, { onConflict: conflict });
+    if (error) {
+      throw new Error(`upsert ${table} batch ${i}-${i + batch.length} → ${error.message} (code ${error.code})`);
+    }
+    upserted += batch.length;
+  }
+  return upserted;
+}
+
+// Ejecuta una etapa (fetch+upsert) sin abortar el run si falla. Devuelve
+// counts + mensaje de error que se loguea y se incluye en la respuesta.
+async function runStep(
+  name: string,
+  fetcher: () => Promise<Record<string, unknown>[]>,
+  table: string,
+  conflict: string,
+): Promise<StepResult> {
+  try {
+    console.log(`[sync-crm] ${name}: fetching from HubSpot…`);
+    const rows = await fetcher();
+    console.log(`[sync-crm] ${name}: fetched=${rows.length}`);
+    if (rows.length === 0) return { fetched: 0, upserted: 0 };
+    const stamped = rows.map((r) => ({ ...r, synced_at: new Date().toISOString() }));
+    const upserted = await batchUpsert(table, stamped, conflict);
+    console.log(`[sync-crm] ${name}: upserted=${upserted}`);
+    return { fetched: rows.length, upserted };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[sync-crm] ${name}: FAILED → ${msg}`);
+    return { fetched: 0, upserted: 0, error: msg };
   }
 }
 
@@ -51,39 +86,62 @@ export default async (): Promise<Response> => {
   }
 
   const run = await startedRun("hubspot");
-  let total = 0;
+  console.log(`[sync-crm] run started id=${run.id}`);
+
+  // Etapas secuenciales para que el log diga claramente qué falla. (Si
+  // alguna requiriera paralelismo, usar Promise.allSettled para no abortar.)
+  const companies = await runStep(
+    "companies",
+    fetchCompanies as () => Promise<Record<string, unknown>[]>,
+    "accounts",
+    "hubspot_company_id",
+  );
+  const contacts = await runStep(
+    "contacts",
+    fetchContacts as () => Promise<Record<string, unknown>[]>,
+    "contacts",
+    "hubspot_contact_id",
+  );
+  const deals = await runStep(
+    "deals",
+    fetchDeals as () => Promise<Record<string, unknown>[]>,
+    "deals",
+    "hubspot_deal_id",
+  );
+  const engagements = await runStep(
+    "engagements",
+    fetchEngagements as () => Promise<Record<string, unknown>[]>,
+    "activities",
+    "hubspot_engagement_id",
+  );
+
+  const breakdown = { companies, contacts, deals, engagements };
+  const total =
+    companies.upserted + contacts.upserted + deals.upserted + engagements.upserted;
+  const errors = [companies, contacts, deals, engagements]
+    .map((s) => s.error)
+    .filter(Boolean) as string[];
+
+  // Refresca vistas materializadas — best effort.
   try {
-    const [companies, contacts, deals, engagements] = await Promise.all([
-      fetchCompanies(),
-      fetchContacts(),
-      fetchDeals(),
-      fetchEngagements(),
-    ]);
-
-    await batchUpsert("accounts", companies.map((c) => ({ ...c, synced_at: new Date().toISOString() })), "hubspot_company_id");
-    await batchUpsert("contacts", contacts.map((c) => ({ ...c, synced_at: new Date().toISOString() })), "hubspot_contact_id");
-    await batchUpsert("deals", deals.map((d) => ({ ...d, synced_at: new Date().toISOString() })), "hubspot_deal_id");
-    await batchUpsert("activities", engagements.map((e) => ({ ...e, synced_at: new Date().toISOString() })), "hubspot_engagement_id");
-
-    total = companies.length + contacts.length + deals.length + engagements.length;
-
-    // Refresca vistas materializadas para que la UI vea los datos nuevos.
     const sb = requireSupabaseAdmin();
-    try { await sb.rpc("refresh_kpi_views"); } catch { /* ignore */ }
-
-    await finishRun(run.id, true, total);
-    return new Response(
-      JSON.stringify({ ok: true, total, breakdown: { companies: companies.length, contacts: contacts.length, deals: deals.length, engagements: engagements.length } }),
-      { headers: { "Content-Type": "application/json" } },
-    );
+    await sb.rpc("refresh_kpi_views");
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    await finishRun(run.id, false, total);
-    return new Response(JSON.stringify({ ok: false, error: msg }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    console.error(`[sync-crm] refresh_kpi_views failed: ${e instanceof Error ? e.message : e}`);
   }
+
+  const ok = errors.length === 0;
+  await finishRun(run.id, ok, total);
+
+  console.log(`[sync-crm] done ok=${ok} total=${total} errors=${errors.length}`);
+
+  return new Response(
+    JSON.stringify({ ok, total, breakdown, errors }, null, 2),
+    {
+      status: ok ? 200 : 500,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 };
 
 export const config: Config = {
