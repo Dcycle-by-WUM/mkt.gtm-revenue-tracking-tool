@@ -148,13 +148,9 @@ export async function listCampaigns(): Promise<CampaignRow[]> {
     return (data as DbKpiByCampaignMonth[]).map(fromDbRow);
   }
 
-  // Sin paid → derivamos del CRM (contacts + deals) para que la pantalla
-  // muestre actividad real por mes. Si tampoco hay CRM, fallback a mock.
+  // Sin paid → derivamos del CRM (contacts + deals).
   const crmOnly = await listCRMOnlyMonthly(sb);
-  if (crmOnly.length > 0) return crmOnly;
-
-  const ov = await listCountryOverrides();
-  return applyOverrides(mockCampaigns, ov);
+  return crmOnly;
 }
 
 // Overrides locales de país (Explorer) se aplican siempre encima, vengan

@@ -105,15 +105,20 @@ async function hsFetch<T>(path: string, qs: Record<string, string | string[]>): 
 async function pageAll<T>(
   path: string,
   baseQs: Record<string, string | string[]>,
+  label = path,
 ): Promise<T[]> {
   const all: T[] = [];
   let after: string | undefined;
-  for (let i = 0; i < 50; i++) {                  // tope de seguridad: 5k filas/run
+  const MAX_PAGES = 200;
+  for (let i = 0; i < MAX_PAGES; i++) {
     const qs = { ...baseQs, limit: "100", ...(after ? { after } : {}) };
     const page = (await hsFetch(path, qs)) as HsPage<T>;
     all.push(...page.results);
     after = page.paging?.next?.after;
     if (!after) break;
+    if (i === MAX_PAGES - 1) {
+      console.warn(`[hubspot] ${label}: alcanzado límite de ${MAX_PAGES * 100} registros — puede haber datos truncados`);
+    }
   }
   return all;
 }
@@ -229,38 +234,77 @@ export type HsDeal = {
   closedate: string | null;
 };
 
+// Pipelines a incluir. Vacío = todos (sin filtro).
+// Configurar via HUBSPOT_DEAL_PIPELINES (IDs separados por coma).
+function dealPipelines(): string[] {
+  const raw = process.env.HUBSPOT_DEAL_PIPELINES;
+  if (!raw || raw.trim() === "") return [];
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+// Fetch asociaciones por batch (la Search API no las devuelve inline).
+async function fetchDealAssociations(
+  dealIds: string[],
+  toType: "contacts" | "companies",
+): Promise<Map<string, string>> {
+  const token = requireToken();
+  const result = new Map<string, string>();
+  for (let i = 0; i < dealIds.length; i += 100) {
+    const batch = dealIds.slice(i, i + 100);
+    const res = await fetch(`${HUBSPOT_BASE}/crm/v3/associations/deals/${toType}/batch/read`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ inputs: batch.map((id) => ({ id })) }),
+    });
+    if (!res.ok) continue;
+    const json = (await res.json()) as { results: { from: { id: string }; to: { id: string }[] }[] };
+    for (const r of json.results ?? []) {
+      if (r.to?.[0]?.id) result.set(r.from.id, r.to[0].id);
+    }
+  }
+  return result;
+}
+
 export async function fetchDeals(): Promise<HsDeal[]> {
-  // Deals: el endpoint objects v3 SÍ devuelve `associations` sin scope extra
-  // (a diferencia de search). Pero no acepta filtro de fecha. Filtramos en
-  // código contra `backfillFrom()` para limitar volumen.
-  const cutoffMs = new Date(backfillFrom()).getTime();
-  const records = await pageAll<HsRecord & {
-    associations?: {
-      contacts?: { results: { id: string }[] };
-      companies?: { results: { id: string }[] };
-    };
-  }>("/crm/v3/objects/deals", {
+  const cutoff = backfillFrom();
+  const pipelines = dealPipelines();
+
+  const filters: { propertyName: string; operator: string; value?: string; values?: string[] }[] = [
+    { propertyName: "createdate", operator: "GTE", value: cutoff },
+  ];
+  if (pipelines.length > 0) {
+    filters.push({
+      propertyName: "pipeline",
+      operator: pipelines.length === 1 ? "EQ" : "IN",
+      ...(pipelines.length === 1 ? { value: pipelines[0] } : { values: pipelines }),
+    });
+  }
+
+  const records = await searchAll<HsRecord>("deals", {
     properties: [...PROPS_DEAL],
-    associations: ["contacts", "companies"],
+    filterGroups: [{ filters }],
+    sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
   });
 
-  return records
-    .filter((r) => {
-      const cd = r.properties.createdate;
-      return cd ? new Date(cd).getTime() >= cutoffMs : false;
-    })
-    .map((r) => {
+  // Fetch asociaciones en batch
+  const dealIds = records.map((r) => r.id);
+  const [contactMap, companyMap] = await Promise.all([
+    fetchDealAssociations(dealIds, "contacts"),
+    fetchDealAssociations(dealIds, "companies"),
+  ]);
+
+  return records.map((r) => {
     const p = r.properties;
     return {
       hubspot_deal_id: r.id,
-      amount: Number(p.amount ?? 0),
+      amount: Number(p.amount_in_home_currency ?? p.amount ?? 0),
       amount_in_home_currency: p.amount_in_home_currency
         ? Number(p.amount_in_home_currency)
         : null,
       dealstage: p.dealstage,
       pipeline: p.pipeline,
-      hubspot_contact_id: r.associations?.contacts?.results?.[0]?.id ?? null,
-      hubspot_company_id: r.associations?.companies?.results?.[0]?.id ?? null,
+      hubspot_contact_id: contactMap.get(r.id) ?? null,
+      hubspot_company_id: companyMap.get(r.id) ?? null,
       createdate: p.createdate,
       closedate: p.closedate,
     };
@@ -280,7 +324,7 @@ export type HsCompany = {
 export async function fetchCompanies(): Promise<HsCompany[]> {
   const records = await pageAll<HsRecord>("/crm/v3/objects/companies", {
     properties: [...PROPS_COMPANY],
-  });
+  }, "companies");
   return records.map((r) => {
     const p = r.properties;
     return {
