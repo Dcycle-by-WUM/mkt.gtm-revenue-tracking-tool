@@ -322,9 +322,14 @@ export type HsCompany = {
 };
 
 export async function fetchCompanies(): Promise<HsCompany[]> {
-  const records = await pageAll<HsRecord>("/crm/v3/objects/companies", {
+  const cutoff = backfillFrom();
+  const records = await searchAll<HsRecord>("companies", {
     properties: [...PROPS_COMPANY],
-  }, "companies");
+    filterGroups: [{ filters: [
+      { propertyName: "createdate", operator: "GTE", value: cutoff },
+    ] }],
+    sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
+  });
   return records.map((r) => {
     const p = r.properties;
     return {
