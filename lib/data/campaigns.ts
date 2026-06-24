@@ -49,7 +49,8 @@ async function listCRMOnlyMonthly(sb: SupabaseClient): Promise<CampaignRow[]> {
   // Una query que agrega contactos por mes y canal-derivado-de-fuente.
   const { data: contacts } = await sb
     .from("contacts")
-    .select("created_at_hs, is_mql, analytics_source, country_parsed, country_raw, hubspot_contact_id");
+    .select("created_at_hs, is_mql, analytics_source, country_parsed, country_raw, hubspot_contact_id")
+    .limit(50000);
 
   if (!contacts || contacts.length === 0) return [];
 
@@ -97,7 +98,8 @@ async function listCRMOnlyMonthly(sb: SupabaseClient): Promise<CampaignRow[]> {
   // distribuimos por mes contra el bucket "Otros" del mismo mes.
   const { data: deals } = await sb
     .from("deals")
-    .select("createdate, dealstage, amount, hubspot_contact_id");
+    .select("createdate, dealstage, amount, hubspot_contact_id")
+    .limit(50000);
 
   if (deals) {
     type DealRow = {
