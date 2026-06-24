@@ -75,12 +75,11 @@ export type HsContact = {
   created_at_hs: string | null;
 };
 
-// Regla MQL (DECISIONES.md #1): MQL = lead_status ∉ {"MK NOT QUALIFIED", vacío}
+// MQL = todo contacto que NO haya sido descalificado por marketing.
+// NULL/vacío = aún no clasificado → cuenta como MQL (coincide con HubSpot).
 function deriveMql(leadStatus: string | null): boolean {
-  if (!leadStatus) return false;
-  const v = leadStatus.trim();
-  if (!v) return false;
-  return v.toUpperCase() !== "MK NOT QUALIFIED";
+  if (!leadStatus || !leadStatus.trim()) return true;
+  return leadStatus.trim().toUpperCase() !== "MK NOT QUALIFIED";
 }
 
 type HsPage<T> = { results: T[]; paging?: { next?: { after: string } } };
