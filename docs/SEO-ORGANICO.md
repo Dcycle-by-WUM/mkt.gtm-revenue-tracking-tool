@@ -8,7 +8,7 @@
 
 La pantalla `/organic` (`app/organic/page.tsx`) es hoy un **stub F5**: dos tablas estáticas de KPIs (`mockSeoKpis`, `mockAeoKpis` en `lib/mock-data.ts:201`) sin filtros, sin keywords, sin URLs, sin tracking de leads y sin conexión a fuentes. No mide nada accionable para gestionar SEO.
 
-El objetivo es convertirla en el **panel de control de SEO orgánico orientado a demos**: saber qué keyword debe llevar a qué página transaccional, cuántas demos genera el orgánico, qué URLs posicionan mejor, y seguir el lead status de quien pide demo orgánica — todo contra un **objetivo editable**. Para que sea real hay que **conectar Google Search Console (GSC), Google Analytics 4 (GA4) y Bing Webmaster Tools (Bing WMT)** vía Supermetrics (la vía ya elegida en el proyecto) + HubSpot para demos/lead status/pipeline.
+El objetivo es convertirla en el **panel de control de SEO orgánico orientado a demos**: saber qué keyword debe llevar a qué página transaccional, cuántas demos genera el orgánico, qué URLs posicionan mejor, y seguir el lead status de quien pide demo orgánica — todo contra un **objetivo editable**. Para que sea real hay que **conectar Google Search Console (GSC), Google Analytics 4 (GA4) y Bing Webmaster Tools (Bing WMT)** mediante **conectores nativos (API individual de cada canal)** + HubSpot para demos/lead status/pipeline.
 
 ---
 
@@ -40,20 +40,22 @@ Cuatro capas, de tráfico a negocio. Las **4 preguntas prioritarias** están mar
 
 ---
 
-## B. Conexión a fuentes (GSC + GA4 + Bing WMT + HubSpot)
+## B. Conexión a fuentes (conectores nativos: API individual por canal)
 
-Todo el tráfico/posición entra por **Supermetrics** (hay stub `lib/supermetrics.ts` y env vars `SUPERMETRICS_API_KEY` / `SUPERMETRICS_TEAM_ID` en `netlify.toml`). Demos/lead status/pipeline por **HubSpot** (bloqueado por API key, §12).
+Cada canal se conecta por su **propia API nativa** (no Supermetrics): GSC, GA4 y Bing WMT con su OAuth/credencial individual; demos/lead status/pipeline por **HubSpot** (bloqueado por API key, §12). Esto da control directo sobre los campos, sin intermediario ni límites de un conector de terceros.
 
-| Fuente | Vía | Campos a leer | Alimenta |
-| --- | --- | --- | --- |
-| **GSC** | Supermetrics (Search Analytics) | query, page, position, clicks, impressions, ctr + setting `brand_keywords` | URLs top, keyword→página, non-branded |
-| **GA4** | Supermetrics | landingPage, sessionSourceMedium (`organic`), eventName=`demo_request`, sessions, conversions | Demos orgánicas, conversion rate por landing |
-| **Bing WMT** | Supermetrics | impressions, clicks, query, position | Bloque Bing/AEO |
-| **HubSpot** | API privada (pendiente) | `original_source`, `hs_lead_status`, `recent_conversion`, deals (`amount`, `dealstage`) | Demos confirmadas, lead status, pipeline € |
+| Fuente | Conector nativo | Auth | Campos a leer | Alimenta |
+| --- | --- | --- | --- | --- |
+| **GSC** | Search Console API (`searchanalytics.query`) | OAuth 2.0 / service account Google | query, page, position, clicks, impressions, ctr (separar marca con lista `brand_keywords` propia) | URLs top, keyword→página, non-branded |
+| **GA4** | GA4 Data API (`runReport`) | OAuth 2.0 / service account Google | landingPage, sessionSourceMedium (`organic`), eventName=`demo_request`, sessions, conversions | Demos orgánicas, conversion rate por landing |
+| **Bing WMT** | Bing Webmaster Tools API | API key de Bing WMT | impressions, clicks, query, position | Bloque Bing/AEO |
+| **HubSpot** | API privada (private app) | token de app privada (pendiente, §12) | `original_source`, `hs_lead_status`, `recent_conversion`, deals (`amount`, `dealstage`) | Demos confirmadas, lead status, pipeline € |
+
+> **Nota de implementación:** un cliente/módulo por canal en `lib/` (p.ej. `lib/gsc.ts`, `lib/ga4.ts`, `lib/bing.ts`, `lib/hubspot.ts`), cada uno con su credencial en env vars propias de Netlify. El stub `lib/supermetrics.ts` **no se usa** para SEO.
 
 La función de cruce es la misma "puerta de canal" que el paid: `original_source ∈ {ORGANIC_SEARCH, AI_REFERRALS}`. Mientras HubSpot siga bloqueado, el bloque de lead status/pipeline funciona con mock realista (igual que `mockHeatContacts`).
 
-> El detalle operativo de conexión (credenciales, settings exactos de Supermetrics) va en `docs/CONEXIONES.md` — añadir ahí las filas de GSC/GA4/Bing para SEO.
+> El detalle operativo de conexión (scopes OAuth, credenciales y env vars por canal) va en `docs/CONEXIONES.md` — añadir ahí las filas de GSC/GA4/Bing con su API nativa.
 
 ---
 
