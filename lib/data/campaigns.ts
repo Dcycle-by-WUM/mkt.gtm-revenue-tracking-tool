@@ -3,6 +3,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import {
   mockCampaigns,
   applyOverrides,
@@ -45,32 +46,35 @@ function sourceToChannel(src: string | null): Channel | "Otros" {
 // Cuando no hay paid en `ad_spend_daily`, derivamos los KPIs solo del CRM
 // (contacts + deals) para que la pantalla muestre actividad real por mes.
 // `spend`/`impressions`/`clicks` quedan a 0 hasta que entre Supermetrics.
+type ContactRow = {
+  created_at_hs: string | null;
+  is_mql: boolean | null;
+  analytics_source: string | null;
+  country_parsed: string | null;
+  country_raw: string | null;
+  hubspot_contact_id: string;
+};
+
+type DealRow = {
+  createdate: string | null;
+  dealstage: string | null;
+  amount: number;
+  hubspot_contact_id: string | null;
+};
+
 async function listCRMOnlyMonthly(sb: SupabaseClient): Promise<CampaignRow[]> {
-  // Una query que agrega contactos por mes y canal-derivado-de-fuente.
-  const { data: contacts } = await sb
-    .from("contacts")
-    .select("created_at_hs, is_mql, analytics_source, country_parsed, country_raw, hubspot_contact_id")
-    .limit(50000);
+  const contacts = await fetchAll<ContactRow>(
+    () => sb.from("contacts").select("created_at_hs, is_mql, analytics_source, country_parsed, country_raw, hubspot_contact_id"),
+  );
 
-  if (!contacts || contacts.length === 0) return [];
+  if (contacts.length === 0) return [];
 
-  // Pre-agregamos: { (channel, month, country) -> {leads, mql} }
   type Key = string;
   type Bucket = CampaignRow;
   const buckets = new Map<Key, Bucket>();
-
-  type ContactRow = {
-    created_at_hs: string | null;
-    is_mql: boolean | null;
-    analytics_source: string | null;
-    country_parsed: string | null;
-    country_raw: string | null;
-    hubspot_contact_id: string;
-  };
-
   const contactIdsByMonth = new Map<string, Set<string>>();
 
-  for (const c of contacts as ContactRow[]) {
+  for (const c of contacts) {
     if (!c.created_at_hs) continue;
     const month = c.created_at_hs.slice(0, 7);
     const channel = sourceToChannel(c.analytics_source);
@@ -96,19 +100,12 @@ async function listCRMOnlyMonthly(sb: SupabaseClient): Promise<CampaignRow[]> {
   // Deals — agrupamos por mes y sumamos amount + closed_won.
   // Sin asociaciones contacto↔deal (el backfill manual las dejó NULL),
   // distribuimos por mes contra el bucket "Otros" del mismo mes.
-  const { data: deals } = await sb
-    .from("deals")
-    .select("createdate, dealstage, amount, hubspot_contact_id")
-    .limit(50000);
+  const deals = await fetchAll<DealRow>(
+    () => sb.from("deals").select("createdate, dealstage, amount, hubspot_contact_id"),
+  );
 
-  if (deals) {
-    type DealRow = {
-      createdate: string | null;
-      dealstage: string | null;
-      amount: number;
-      hubspot_contact_id: string | null;
-    };
-    for (const d of deals as DealRow[]) {
+  if (deals.length > 0) {
+    for (const d of deals) {
       if (!d.createdate) continue;
       const month = d.createdate.slice(0, 7);
       // Bucket genérico "Otros" del mes (mientras no haya asociaciones reales).
