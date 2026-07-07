@@ -9,6 +9,7 @@ import {
   decodeLinkedInCsv,
   parseLinkedInAdsCsv,
   aggregateLinkedInAds,
+  type LinkedInAdsAggregate,
 } from "@/lib/linkedin-ads";
 
 const BATCH_SIZE = 500;
@@ -31,12 +32,25 @@ export type LinkedInIngestSummary = {
   multiCampaigns: string[]; // nombres clasificados como "Multi" (para revisar)
 };
 
-// El run de `sync_runs` se crea ANTES de parsear el CSV — el cliente (que
-// ahora invoca esto vía Background Function y hace polling contra esta
-// tabla, ver upload-linkedin-ads-background.ts) necesita encontrar una fila
-// enseguida y verla resolverse a "error" incluso si el fallo es un CSV mal
-// formado, no solo si falla el upsert a Supabase.
+// Compat: ruta legacy que recibe el CSV crudo y lo parsea en el servidor.
+// El flujo actual parsea/agrega en el NAVEGADOR (ver linkedin-upload-client)
+// y llama a ingestLinkedInAggregate con el resultado — mucho más pequeño que
+// el CSV a nivel Ad y sin depender de límites de payload de la plataforma.
 export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInIngestSummary> {
+  const text = decodeLinkedInCsv(file);
+  const rawRows = parseLinkedInAdsCsv(text);
+  const agg = aggregateLinkedInAds(rawRows);
+  return ingestLinkedInAggregate(agg, rawRows.length);
+}
+
+// El run de `sync_runs` se crea ANTES de tocar datos — el cliente hace
+// polling contra esta tabla como red de seguridad si pierde la respuesta
+// HTTP, y necesita encontrar una fila enseguida y verla resolverse a
+// "ok"/"error".
+export async function ingestLinkedInAggregate(
+  agg: LinkedInAdsAggregate,
+  rowsParsed: number,
+): Promise<LinkedInIngestSummary> {
   const sb = requireSupabaseAdmin();
 
   const runIns = await sb
@@ -50,10 +64,6 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
   const runId = runIns.data.id as string;
 
   try {
-    const text = decodeLinkedInCsv(file);
-    const rawRows = parseLinkedInAdsCsv(text);
-    const agg = aggregateLinkedInAds(rawRows);
-
     const countryBreakdown: Record<string, number> = {};
     const multiCampaigns: string[] = [];
     for (const c of agg.campaigns) {
@@ -126,12 +136,9 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
       upserted += spendBatches[i].length;
     });
 
-    try {
-      await sb.rpc("refresh_kpi_views");
-    } catch (e) {
-      console.error(`[linkedin-ads] refresh_kpi_views failed: ${e instanceof Error ? e.message : e}`);
-    }
-
+    // El run se marca "ok" ANTES del refresh de vistas: los datos ya están
+    // upserted, y si la plataforma mata la función a mitad del refresh no
+    // queda un run "running" huérfano que confunda al polling del cliente.
     await sb
       .from("sync_runs")
       .update({
@@ -142,9 +149,15 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
       })
       .eq("id", runId);
 
+    try {
+      await sb.rpc("refresh_kpi_views");
+    } catch (e) {
+      console.error(`[linkedin-ads] refresh_kpi_views failed: ${e instanceof Error ? e.message : e}`);
+    }
+
     return {
       ok: true,
-      rowsParsed: rawRows.length,
+      rowsParsed,
       campaigns: agg.campaigns.length,
       spendRows: upserted,
       totalSpend: agg.totalSpend,
@@ -158,9 +171,8 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
       .from("sync_runs")
       .update({ status: "error", error_message: msg, finished_at: new Date().toISOString() })
       .eq("id", runId);
-    // El fallo puede haber ocurrido durante el parseo del CSV, antes de que
-    // `rawRows`/`agg` existan — no hay nada fiable que devolver aquí más
-    // allá del error. El polling del cliente lee `sync_runs.error_message`.
+    // No hay nada fiable que devolver aquí más allá del error. El polling
+    // del cliente lee `sync_runs.error_message`.
     return {
       ok: false,
       error: msg,
