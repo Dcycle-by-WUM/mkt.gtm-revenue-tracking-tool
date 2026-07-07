@@ -100,15 +100,29 @@ export function LinkedInCsvUploader() {
         watermarkId = data?.id ?? null;
       }
 
+      let res: Response;
       try {
-        // Las Background Functions responden ~inmediatamente con un 202
-        // (aceptado) — el trabajo real sigue corriendo después.
-        await fetch("/.netlify/functions/upload-linkedin-ads-background", {
+        // Una Background Function real responde ~inmediatamente con un 202
+        // (aceptado) — el trabajo real sigue corriendo después. Si en vez de
+        // eso llega un error síncrono (por lo que sea: la convención
+        // `-background` no siempre se respeta con el runtime de Next.js de
+        // por medio), mejor mostrarlo ya que quedarnos esperando un poll que
+        // nunca va a resolver.
+        res = await fetch("/.netlify/functions/upload-linkedin-ads-background", {
           method: "POST",
           body: fd,
         });
       } catch (e) {
         setPhase({ kind: "done", ok: false, error: e instanceof Error ? e.message : String(e) });
+        return;
+      }
+      if (res.status !== 202 && !res.ok) {
+        const text = await res.text().catch(() => "");
+        setPhase({
+          kind: "done",
+          ok: false,
+          error: `HTTP ${res.status} al invocar la función: ${text.slice(0, 300) || "(sin detalle)"}`,
+        });
         return;
       }
       setPhase({ kind: "processing", fileName: file.name });
