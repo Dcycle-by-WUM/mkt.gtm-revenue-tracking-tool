@@ -31,19 +31,13 @@ export type LinkedInIngestSummary = {
   multiCampaigns: string[]; // nombres clasificados como "Multi" (para revisar)
 };
 
+// El run de `sync_runs` se crea ANTES de parsear el CSV — el cliente (que
+// ahora invoca esto vía Background Function y hace polling contra esta
+// tabla, ver upload-linkedin-ads-background.ts) necesita encontrar una fila
+// enseguida y verla resolverse a "error" incluso si el fallo es un CSV mal
+// formado, no solo si falla el upsert a Supabase.
 export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInIngestSummary> {
   const sb = requireSupabaseAdmin();
-
-  const text = decodeLinkedInCsv(file);
-  const rawRows = parseLinkedInAdsCsv(text);
-  const agg = aggregateLinkedInAds(rawRows);
-
-  const countryBreakdown: Record<string, number> = {};
-  const multiCampaigns: string[] = [];
-  for (const c of agg.campaigns) {
-    countryBreakdown[c.countryParsed] = (countryBreakdown[c.countryParsed] ?? 0) + 1;
-    if (c.countryParsed === "Multi") multiCampaigns.push(c.campaignName);
-  }
 
   const runIns = await sb
     .from("sync_runs")
@@ -56,6 +50,17 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
   const runId = runIns.data.id as string;
 
   try {
+    const text = decodeLinkedInCsv(file);
+    const rawRows = parseLinkedInAdsCsv(text);
+    const agg = aggregateLinkedInAds(rawRows);
+
+    const countryBreakdown: Record<string, number> = {};
+    const multiCampaigns: string[] = [];
+    for (const c of agg.campaigns) {
+      countryBreakdown[c.countryParsed] = (countryBreakdown[c.countryParsed] ?? 0) + 1;
+      if (c.countryParsed === "Multi") multiCampaigns.push(c.campaignName);
+    }
+
     // 1) Mezclar first_seen/last_seen con lo que ya hubiera en `campaigns`
     //    (no queremos que un re-upload parcial estreche la ventana conocida).
     const platformIds = agg.campaigns.map((c) => c.platformCampaignId);
@@ -147,18 +152,21 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
     const msg = e instanceof Error ? e.message : String(e);
     await sb
       .from("sync_runs")
-      .update({ status: "error", finished_at: new Date().toISOString() })
+      .update({ status: "error", error_message: msg, finished_at: new Date().toISOString() })
       .eq("id", runId);
+    // El fallo puede haber ocurrido durante el parseo del CSV, antes de que
+    // `rawRows`/`agg` existan — no hay nada fiable que devolver aquí más
+    // allá del error. El polling del cliente lee `sync_runs.error_message`.
     return {
       ok: false,
       error: msg,
-      rowsParsed: rawRows.length,
-      campaigns: agg.campaigns.length,
+      rowsParsed: 0,
+      campaigns: 0,
       spendRows: 0,
-      totalSpend: agg.totalSpend,
-      dateRange: agg.dateRange,
-      countryBreakdown,
-      multiCampaigns,
+      totalSpend: 0,
+      dateRange: null,
+      countryBreakdown: {},
+      multiCampaigns: [],
     };
   }
 }
