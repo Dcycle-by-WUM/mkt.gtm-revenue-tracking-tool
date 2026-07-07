@@ -1,12 +1,25 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Panel } from "@/components/Page";
-import { actionUploadLinkedInAds } from "@/app/actions";
 import type { LinkedInIngestSummary } from "@/lib/data/ad-spend";
 import { fmtEur } from "@/lib/kpis";
 
+const emptySummary = (error: string): LinkedInIngestSummary => ({
+  ok: false,
+  error,
+  rowsParsed: 0,
+  campaigns: 0,
+  spendRows: 0,
+  totalSpend: 0,
+  dateRange: null,
+  countryBreakdown: {},
+  multiCampaigns: [],
+});
+
 export function LinkedInCsvUploader() {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<LinkedInIngestSummary | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -19,8 +32,23 @@ export function LinkedInCsvUploader() {
     const fd = new FormData();
     fd.set("file", file);
     startTransition(async () => {
-      const summary = await actionUploadLinkedInAds(fd);
-      setResult(summary);
+      // Función Netlify dedicada (no Server Action) — parsear miles de filas
+      // + varios batches de upsert puede pasarse del timeout corto que da el
+      // runtime de Next.js en Netlify para Server Actions.
+      try {
+        const res = await fetch("/api/upload-linkedin-ads", { method: "POST", body: fd });
+        const text = await res.text();
+        let summary: LinkedInIngestSummary;
+        try {
+          summary = JSON.parse(text);
+        } catch {
+          summary = emptySummary(`Respuesta inesperada del servidor (HTTP ${res.status}): ${text.slice(0, 300)}`);
+        }
+        setResult(summary);
+      } catch (e) {
+        setResult(emptySummary(e instanceof Error ? e.message : String(e)));
+      }
+      router.refresh();
     });
   };
 

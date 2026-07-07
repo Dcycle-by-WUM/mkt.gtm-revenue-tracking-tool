@@ -11,7 +11,6 @@ import { upsertTarget, deleteTarget } from "@/lib/data/targets";
 import { setCampaignTagsByName } from "@/lib/data/campaign-tags";
 import { updateAccountAbm } from "@/lib/data/accounts";
 import { setActiveHeatWeights, type HeatWeightsDoc } from "@/lib/data/heat-weights";
-import { ingestLinkedInAdsCsv, type LinkedInIngestSummary } from "@/lib/data/ad-spend";
 import { upsertCampaignAlias, deleteCampaignAlias } from "@/lib/data/campaign-aliases";
 import type { ForecastRow } from "@/lib/mock-data";
 
@@ -61,45 +60,6 @@ export async function actionSetHeatWeights(doc: HeatWeightsDoc, name: string): P
   await setActiveHeatWeights(doc, name);
   revalidatePath("/abm-heat");
   revalidatePath("/admin");
-}
-
-export async function actionUploadLinkedInAds(formData: FormData): Promise<LinkedInIngestSummary> {
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    return {
-      ok: false,
-      error: "No se recibió ningún archivo.",
-      rowsParsed: 0,
-      campaigns: 0,
-      spendRows: 0,
-      totalSpend: 0,
-      dateRange: null,
-      countryBreakdown: {},
-      multiCampaigns: [],
-    };
-  }
-  try {
-    const buf = await file.arrayBuffer();
-    const summary = await ingestLinkedInAdsCsv(buf);
-    revalidatePath("/");
-    revalidatePath("/paid");
-    revalidatePath("/explorer");
-    revalidatePath("/data-health");
-    revalidatePath("/admin");
-    return summary;
-  } catch (e) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : String(e),
-      rowsParsed: 0,
-      campaigns: 0,
-      spendRows: 0,
-      totalSpend: 0,
-      dateRange: null,
-      countryBreakdown: {},
-      multiCampaigns: [],
-    };
-  }
 }
 
 export async function actionSetCampaignAlias(rawUtm: string, campaignId: string): Promise<void> {

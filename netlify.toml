@@ -25,6 +25,9 @@
 [functions."sync-crm"]
   timeout = 300
 
+[functions."upload-linkedin-ads"]
+  timeout = 300
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
