@@ -11,7 +11,7 @@ import {
   type Channel,
   type CountryOverrides,
 } from "@/lib/mock-data";
-import type { DbKpiByCampaignMonth } from "@/lib/supabase/types";
+import type { DbKpiByCampaignMonth, DbKpiOrganicByMonth } from "@/lib/supabase/types";
 import { listCountryOverrides } from "@/lib/data/overrides";
 
 function fromDbRow(r: DbKpiByCampaignMonth): CampaignRow {
@@ -30,6 +30,33 @@ function fromDbRow(r: DbKpiByCampaignMonth): CampaignRow {
     pipeline: Number(r.pipeline) || 0,
     closedWon: Number(r.closed_won) || 0,
   };
+}
+
+// `kpi_organic_by_month` (migración 0009) corre siempre, en paralelo a la
+// paid — no como fallback — para que los leads orgánicos no desaparezcan de
+// Overview en cuanto entra spend de LinkedIn/Google.
+function fromOrganicDbRow(r: DbKpiOrganicByMonth): CampaignRow {
+  return {
+    channel: "Otros",
+    campaign: "(orgánico)",
+    campaignGroup: null,
+    country: r.country,
+    month: r.month,
+    spend: 0,
+    impressions: Number(r.impressions) || 0,
+    clicks: Number(r.clicks) || 0,
+    leads: Number(r.leads) || 0,
+    mql: Number(r.mql) || 0,
+    sql: Number(r.sql) || 0,
+    pipeline: Number(r.pipeline) || 0,
+    closedWon: Number(r.closed_won) || 0,
+  };
+}
+
+async function listOrganicRows(sb: SupabaseClient): Promise<CampaignRow[]> {
+  const { data } = await sb.from("kpi_organic_by_month").select("*");
+  if (!data) return [];
+  return (data as DbKpiOrganicByMonth[]).map(fromOrganicDbRow);
 }
 
 // Mapea `hs_analytics_source` (que es la "original source" de HubSpot) al
@@ -137,17 +164,24 @@ export async function listCampaigns(): Promise<CampaignRow[]> {
     return applyOverrides(mockCampaigns, ov);
   }
 
-  // Primer intento: vista materializada (paid × CRM cross).
-  const { data } = await sb
-    .from("kpi_by_campaign_month")
-    .select("*")
-    .order("spend", { ascending: false });
+  // Paid (vista materializada, paid × CRM cross) + Orgánico corren siempre
+  // en paralelo — el orgánico NO es un fallback del paid, son buckets
+  // independientes que se muestran juntos.
+  const [paidRes, organicRows] = await Promise.all([
+    sb.from("kpi_by_campaign_month").select("*").order("spend", { ascending: false }),
+    listOrganicRows(sb),
+  ]);
 
-  if (data && data.length > 0) {
-    return (data as DbKpiByCampaignMonth[]).map(fromDbRow);
+  const paidRows = paidRes.data && paidRes.data.length > 0
+    ? (paidRes.data as DbKpiByCampaignMonth[]).map(fromDbRow)
+    : [];
+
+  if (paidRows.length > 0 || organicRows.length > 0) {
+    return [...paidRows, ...organicRows];
   }
 
-  // Sin paid → derivamos del CRM (contacts + deals).
+  // Ni paid ni orgánico (ningún sync ha corrido todavía) → derivar del CRM
+  // crudo para que la pantalla muestre algo mientras tanto.
   const crmOnly = await listCRMOnlyMonthly(sb);
   return crmOnly;
 }

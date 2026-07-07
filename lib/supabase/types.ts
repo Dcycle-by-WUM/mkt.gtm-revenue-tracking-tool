@@ -228,6 +228,21 @@ export type DbKpiByChannelMonth = {
   closed_won: number;
 };
 
+// Bucket orgánico (no paid) — migración 0009. Sin `channel` propio en DB
+// (no viene de `campaigns.source`); se etiqueta "Otros" al mapear a CampaignRow.
+export type DbKpiOrganicByMonth = {
+  country: string;
+  month: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  mql: number;
+  sql: number;
+  pipeline: number;
+  closed_won: number;
+};
+
 export type DbOrganicTraffic = {
   id: string;
   source: "GSC" | "GA4" | "Bing";

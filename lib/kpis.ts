@@ -45,6 +45,12 @@ export const mqlRate = (m: ChannelMetrics) => ratio(m.mql, m.leads);
 /** % SQL/MQL */
 export const sqlRate = (m: ChannelMetrics) => ratio(m.sql, m.mql);
 
+/** % SQL/Lead (conversión directa lead → SQL) */
+export const leadToSqlRate = (m: ChannelMetrics) => ratio(m.sql, m.leads);
+
+/** Pipeline € medio por SQL */
+export const avgPipePerSql = (m: ChannelMetrics) => ratio(m.pipeline, m.sql);
+
 // ── Formateadores para UI ──────────────────────────────────────
 
 export const fmtEur = (v: number | null) =>
