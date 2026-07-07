@@ -4,41 +4,38 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Panel } from "@/components/Page";
 import { getSupabase } from "@/lib/supabase/client";
+import type { LinkedInIngestSummary } from "@/lib/data/ad-spend";
+import { fmtEur } from "@/lib/kpis";
 
-// Sube a una Background Function de Netlify (hasta 15 min, ver
-// netlify/functions/upload-linkedin-ads-background.ts) — necesaria porque
-// parsear miles de filas + varios batches de upsert supera el límite de
-// ejecución de un endpoint síncrono normal (~10-26s), lo que antes producía
-// un 500 genérico de plataforma o un crash del lado cliente.
-//
-// Netlify no reenvía la respuesta real de una Background Function al
-// llamador (solo confirma que se aceptó la invocación) — así que en vez de
-// esperar el `fetch`, hacemos polling contra `sync_runs` (lectura vía anon
-// key, RLS ya lo permite) hasta ver el run pasar de "running" a "ok"/"error".
+// Sube a app/api/upload-linkedin-ads (Route Handler nativo de Next.js, no
+// una función Netlify a mano — dos intentos con netlify/functions/*.ts
+// devolvieron siempre un 500 genérico de plataforma, todo apunta a que
+// @netlify/plugin-nextjs intercepta el routing de /.netlify/functions/*
+// antes de que llegue a mi función). Espera la respuesta directa; si el
+// fetch falla o se corta a media petición, cae a polling contra `sync_runs`
+// como red de seguridad (el run puede haber terminado igualmente en el
+// servidor aunque la conexión del navegador se haya perdido).
 
 type Phase =
   | { kind: "idle" }
   | { kind: "uploading"; fileName: string }
   | { kind: "processing"; fileName: string }
-  | { kind: "done"; ok: true; rows: number | null; lastCovered: string | null }
+  | { kind: "done"; ok: true; summary: LinkedInIngestSummary }
   | { kind: "done"; ok: false; error: string };
 
 const POLL_INTERVAL_MS = 3000;
-const POLL_TIMEOUT_MS = 10 * 60 * 1000; // 10 min tope de espera en el navegador
+const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min tope de espera en el navegador
 
 export function LinkedInCsvUploader() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Identifica el run nuevo por `id` (watermark tomado ANTES de subir), no
-  // por timestamp — un filtro `started_at >= since` es frágil ante cualquier
-  // desfase de reloj navegador↔servidor: si el servidor va aunque sea un
-  // segundo por detrás, la fila recién creada queda excluida para siempre y
-  // el polling se cuelga en "procesando" aunque el backend ya terminó (esto
-  // es justo lo que pasó: filas 'error' en <100ms, invisibles al poll).
+  // Red de seguridad: identifica el run por `id` (watermark tomado ANTES de
+  // subir), no por timestamp — un filtro por fecha es frágil ante cualquier
+  // desfase de reloj navegador↔servidor.
   const pollSyncRun = useCallback(
-    async (watermarkId: string | null, fileName: string) => {
+    async (watermarkId: string | null) => {
       const sb = getSupabase();
       if (!sb) {
         setPhase({ kind: "done", ok: false, error: "Supabase no configurado en el navegador (falta NEXT_PUBLIC_SUPABASE_ANON_KEY)." });
@@ -60,9 +57,22 @@ export function LinkedInCsvUploader() {
         }
         if (data && data.id !== watermarkId && data.status !== "running") {
           if (data.status === "ok") {
-            setPhase({ kind: "done", ok: true, rows: data.rows, lastCovered: data.last_covered_date });
+            setPhase({
+              kind: "done",
+              ok: true,
+              summary: {
+                ok: true,
+                rowsParsed: 0,
+                campaigns: 0,
+                spendRows: data.rows ?? 0,
+                totalSpend: 0,
+                dateRange: data.last_covered_date ? { min: "", max: data.last_covered_date } : null,
+                countryBreakdown: {},
+                multiCampaigns: [],
+              },
+            });
           } else {
-            setPhase({ kind: "done", ok: false, error: data.error_message ?? "Fallo desconocido — revisa los logs de la función en Netlify." });
+            setPhase({ kind: "done", ok: false, error: data.error_message ?? "Fallo desconocido — revisa Data Health." });
           }
           router.refresh();
           return;
@@ -72,7 +82,7 @@ export function LinkedInCsvUploader() {
       setPhase({
         kind: "done",
         ok: false,
-        error: `"${fileName}" sigue procesándose pasado el tiempo de espera del navegador — revisa /data-health, probablemente termine igualmente.`,
+        error: "Sigue procesándose pasado el tiempo de espera del navegador — revisa /data-health, probablemente termine igualmente.",
       });
     },
     [router],
@@ -100,33 +110,27 @@ export function LinkedInCsvUploader() {
         watermarkId = data?.id ?? null;
       }
 
-      let res: Response;
       try {
-        // Una Background Function real responde ~inmediatamente con un 202
-        // (aceptado) — el trabajo real sigue corriendo después. Si en vez de
-        // eso llega un error síncrono (por lo que sea: la convención
-        // `-background` no siempre se respeta con el runtime de Next.js de
-        // por medio), mejor mostrarlo ya que quedarnos esperando un poll que
-        // nunca va a resolver.
-        res = await fetch("/.netlify/functions/upload-linkedin-ads-background", {
-          method: "POST",
-          body: fd,
-        });
+        const res = await fetch("/api/upload-linkedin-ads", { method: "POST", body: fd });
+        const text = await res.text();
+        let summary: LinkedInIngestSummary;
+        try {
+          summary = JSON.parse(text);
+        } catch {
+          throw new Error(`Respuesta no-JSON (HTTP ${res.status}): ${text.slice(0, 300)}`);
+        }
+        if (summary.ok) {
+          setPhase({ kind: "done", ok: true, summary });
+        } else {
+          setPhase({ kind: "done", ok: false, error: summary.error ?? "Fallo desconocido." });
+        }
+        router.refresh();
       } catch (e) {
-        setPhase({ kind: "done", ok: false, error: e instanceof Error ? e.message : String(e) });
-        return;
+        // El fetch falló o se cortó (p.ej. timeout de plataforma a media
+        // petición) — el run puede haber terminado igual en el servidor.
+        setPhase({ kind: "processing", fileName: file.name });
+        await pollSyncRun(watermarkId);
       }
-      if (res.status !== 202 && !res.ok) {
-        const text = await res.text().catch(() => "");
-        setPhase({
-          kind: "done",
-          ok: false,
-          error: `HTTP ${res.status} al invocar la función: ${text.slice(0, 300) || "(sin detalle)"}`,
-        });
-        return;
-      }
-      setPhase({ kind: "processing", fileName: file.name });
-      await pollSyncRun(watermarkId, file.name);
     })();
   };
 
@@ -140,8 +144,6 @@ export function LinkedInCsvUploader() {
         campaña × día y se cruza con HubSpot por <code>Campaign Name</code> →
         <code>utm_campaign</code>. Idempotente: subir un periodo ya cargado no
         duplica; subir un mes nuevo (p.ej. julio) se suma sin tocar el resto.
-        Procesa en segundo plano — puede tardar uno o dos minutos con
-        ficheros grandes.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -157,20 +159,49 @@ export function LinkedInCsvUploader() {
           <span className="text-xs text-[var(--muted)]">Subiendo {phase.fileName}…</span>
         )}
         {phase.kind === "processing" && (
-          <span className="text-xs text-[var(--muted)]">Procesando {phase.fileName} en segundo plano…</span>
+          <span className="text-xs text-[var(--muted)]">
+            La petición se cortó, comprobando si terminó en el servidor…
+          </span>
         )}
       </div>
 
       {phase.kind === "done" && (
         <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm">
           {phase.ok ? (
-            <div className="text-emerald-300">
-              ✓ Sync completado — {phase.rows ?? "?"} filas campaña×día actualizadas
-              {phase.lastCovered && <> · último día cubierto {phase.lastCovered}</>}.
-              Revisa el desglose en{" "}
-              <a href="/data-health" className="underline">Data Health</a> o{" "}
-              <a href="/" className="underline">Overview</a>.
-            </div>
+            <>
+              <div className="text-emerald-300">
+                ✓ {phase.summary.campaigns > 0 && <>{phase.summary.campaigns} campañas · </>}
+                {phase.summary.spendRows} filas campaña×día actualizadas
+                {phase.summary.totalSpend > 0 && <> · {fmtEur(phase.summary.totalSpend)} spend total</>}
+                {phase.summary.dateRange && (
+                  <>
+                    {" "}
+                    · {phase.summary.dateRange.min || "…"} → {phase.summary.dateRange.max}
+                  </>
+                )}
+              </div>
+              {Object.keys(phase.summary.countryBreakdown).length > 0 && (
+                <div className="mt-2 text-xs text-[var(--muted)]">
+                  País (nº campañas):{" "}
+                  {Object.entries(phase.summary.countryBreakdown)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([country, n]) => `${country} (${n})`)
+                    .join(" · ")}
+                </div>
+              )}
+              {phase.summary.multiCampaigns.length > 0 && (
+                <details className="mt-2 text-xs text-[var(--muted)]">
+                  <summary className="cursor-pointer">
+                    {phase.summary.multiCampaigns.length} campañas clasificadas como &quot;Multi&quot; (revisar)
+                  </summary>
+                  <ul className="mt-1 list-inside list-disc space-y-0.5">
+                    {phase.summary.multiCampaigns.map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
           ) : (
             <div className="text-amber-300">✗ Error: {phase.error}</div>
           )}

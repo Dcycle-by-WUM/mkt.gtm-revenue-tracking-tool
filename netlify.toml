@@ -25,10 +25,6 @@
 [functions."sync-crm"]
   timeout = 300
 
-# upload-linkedin-ads-background no necesita override de timeout — el
-# sufijo `-background` en el nombre ya le da hasta 15 min por defecto en
-# Netlify (ver comentario en el propio fichero).
-
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
