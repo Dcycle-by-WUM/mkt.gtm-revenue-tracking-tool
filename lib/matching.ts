@@ -13,6 +13,7 @@
 // `{ status: "unmatched" }`. La pantalla Data Health renderiza la cola.
 
 import { getSupabase } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 const ACCENT_MAP: Record<string, string> = {
   á: "a", é: "e", í: "i", ó: "o", ú: "u", ü: "u", ñ: "n",
@@ -131,17 +132,45 @@ export async function matchUtmToCampaign(utmRaw: string): Promise<MatchResult> {
   return { status: "unmatched" };
 }
 
-// Cola para Data Health: contactos cuyo utm_campaign no casó nada.
+// Cola para Data Health: contactos cuyo utm_campaign no casó ninguna
+// campaña por ninguno de los pasos automáticos (exacto/alias/tag manual —
+// mismo universo que `campaign_match_keys`, migración 0008). Fuzzy queda
+// fuera adrede: es la vía de resolución humana, no de detección.
+//
+// Nota: `utm_campaign_norm` en `contacts` se rellena SIEMPRE que hay
+// `utm_campaign_raw` (ver mapContact en lib/hubspot.ts) — no indica match,
+// solo que se normalizó. El único chequeo correcto es un anti-join real
+// contra el universo de claves resueltas.
 export async function listUnmatchedUtms(): Promise<string[]> {
   const sb = getSupabase();
   if (!sb) return [];
-  // Heurística: contactos con utm_campaign_raw no nulo pero sin utm_campaign_norm
-  // resuelto a ninguna campaña. La ingesta CRM marca esto.
-  const { data } = await sb
-    .from("contacts")
-    .select("utm_campaign_raw")
-    .not("utm_campaign_raw", "is", null)
-    .is("utm_campaign_norm", null);
-  if (!data) return [];
-  return [...new Set((data as { utm_campaign_raw: string }[]).map((r) => r.utm_campaign_raw))];
+
+  const [campaignsRes, aliasesRes, tagsRes] = await Promise.all([
+    sb.from("campaigns").select("campaign_name_norm"),
+    sb.from("campaign_aliases").select("norm_key"),
+    sb.from("utm_manual_tags").select("utm_norm"),
+  ]);
+  const resolved = new Set<string>([
+    ...((campaignsRes.data ?? []) as { campaign_name_norm: string }[]).map((r) => r.campaign_name_norm),
+    ...((aliasesRes.data ?? []) as { norm_key: string }[]).map((r) => r.norm_key),
+    ...((tagsRes.data ?? []) as { utm_norm: string }[]).map((r) => r.utm_norm),
+  ]);
+
+  const contacts = await fetchAll<{ utm_campaign_raw: string | null; utm_campaign_norm: string | null }>(
+    () =>
+      sb
+        .from("contacts")
+        .select("utm_campaign_raw, utm_campaign_norm")
+        .not("utm_campaign_raw", "is", null),
+  );
+
+  const unmatchedByNorm = new Map<string, string>();
+  for (const c of contacts) {
+    if (!c.utm_campaign_norm || !c.utm_campaign_raw) continue;
+    if (resolved.has(c.utm_campaign_norm)) continue;
+    if (!unmatchedByNorm.has(c.utm_campaign_norm)) {
+      unmatchedByNorm.set(c.utm_campaign_norm, c.utm_campaign_raw);
+    }
+  }
+  return [...unmatchedByNorm.values()];
 }

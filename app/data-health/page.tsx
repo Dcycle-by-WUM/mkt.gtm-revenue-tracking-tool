@@ -1,7 +1,10 @@
 import { PageHeader, Panel } from "@/components/Page";
 import { getSourceHealth } from "@/lib/data/source-health";
 import { listUnmatchedUtms } from "@/lib/matching";
+import { listCampaignOptions } from "@/lib/data/campaigns";
+import { supabaseLive } from "@/lib/supabase/client";
 import { mockUnmatchedUtms, mockMissingCountry } from "@/lib/mock-data";
+import { UnmatchedUtmResolver } from "./unmatched-utm-resolver";
 
 export const dynamic = "force-dynamic";
 
@@ -23,9 +26,13 @@ function fmtDate(iso: string | null): string {
 }
 
 export default async function DataHealthPage() {
-  const health = await getSourceHealth();
-  const unmatched = await listUnmatchedUtms();
-  const unmatchedList = unmatched.length > 0 ? unmatched : mockUnmatchedUtms;
+  const [health, unmatched, campaignOptions] = await Promise.all([
+    getSourceHealth(),
+    listUnmatchedUtms(),
+    listCampaignOptions(),
+  ]);
+  const isLive = supabaseLive();
+  const unmatchedList = isLive ? unmatched : mockUnmatchedUtms;
 
   return (
     <div>
@@ -69,7 +76,9 @@ export default async function DataHealthPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Panel title={`UTMs sin match (${unmatchedList.length})`}>
-          {unmatchedList.length === 0 ? (
+          {isLive ? (
+            <UnmatchedUtmResolver utms={unmatchedList} campaigns={campaignOptions} />
+          ) : unmatchedList.length === 0 ? (
             <p className="text-sm text-[var(--muted)]">No hay UTMs sin resolver.</p>
           ) : (
             <ul className="space-y-1 text-xs">
