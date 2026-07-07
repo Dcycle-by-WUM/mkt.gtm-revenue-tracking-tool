@@ -3,6 +3,7 @@ import { integrations } from "@/lib/config";
 import { getActiveHeatWeights } from "@/lib/data/heat-weights";
 import { listTargets } from "@/lib/data/targets";
 import { HeatWeightsEditor } from "./admin-client";
+import { LinkedInCsvUploader } from "./linkedin-upload-client";
 import { fmtEur } from "@/lib/kpis";
 
 export const dynamic = "force-dynamic";
@@ -136,6 +137,10 @@ export default async function AdminPage() {
           )}
           <p className="mt-2 text-xs text-[var(--muted)]">Edítalos en <a href="/forecast" className="text-[var(--accent)] underline">Pipeline & Forecast</a>.</p>
         </Panel>
+      </div>
+
+      <div className="mt-6">
+        <LinkedInCsvUploader />
       </div>
 
       <div className="mt-6">
