@@ -90,11 +90,12 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
     });
 
     const idByPlatformId = new Map<string, string>();
-    for (const batch of chunk(campaignRows, BATCH_SIZE)) {
-      const { data, error } = await sb
-        .from("campaigns")
-        .upsert(batch, { onConflict: "source,platform_campaign_id" })
-        .select("id, platform_campaign_id");
+    const campaignUpserts = await Promise.all(
+      chunk(campaignRows, BATCH_SIZE).map((batch) =>
+        sb.from("campaigns").upsert(batch, { onConflict: "source,platform_campaign_id" }).select("id, platform_campaign_id"),
+      ),
+    );
+    for (const { data, error } of campaignUpserts) {
       if (error) throw new Error(`upsert campaigns → ${error.message}`);
       for (const r of data ?? []) idByPlatformId.set(r.platform_campaign_id, r.id);
     }
@@ -113,14 +114,17 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
       synced_at: new Date().toISOString(),
     }));
 
+    const spendBatches = chunk(spendRows, BATCH_SIZE);
+    const spendUpserts = await Promise.all(
+      spendBatches.map((batch) =>
+        sb.from("ad_spend_daily").upsert(batch, { onConflict: "source,platform_campaign_id,date" }),
+      ),
+    );
     let upserted = 0;
-    for (const batch of chunk(spendRows, BATCH_SIZE)) {
-      const { error } = await sb
-        .from("ad_spend_daily")
-        .upsert(batch, { onConflict: "source,platform_campaign_id,date" });
+    spendUpserts.forEach(({ error }, i) => {
       if (error) throw new Error(`upsert ad_spend_daily → ${error.message}`);
-      upserted += batch.length;
-    }
+      upserted += spendBatches[i].length;
+    });
 
     try {
       await sb.rpc("refresh_kpi_views");
