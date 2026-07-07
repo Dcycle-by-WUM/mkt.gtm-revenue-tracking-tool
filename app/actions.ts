@@ -12,6 +12,7 @@ import { setCampaignTagsByName } from "@/lib/data/campaign-tags";
 import { updateAccountAbm } from "@/lib/data/accounts";
 import { setActiveHeatWeights, type HeatWeightsDoc } from "@/lib/data/heat-weights";
 import { ingestLinkedInAdsCsv, type LinkedInIngestSummary } from "@/lib/data/ad-spend";
+import { upsertCampaignAlias, deleteCampaignAlias } from "@/lib/data/campaign-aliases";
 import type { ForecastRow } from "@/lib/mock-data";
 
 export async function actionSetCountryOverride(pattern: string, country: string): Promise<void> {
@@ -99,4 +100,20 @@ export async function actionUploadLinkedInAds(formData: FormData): Promise<Linke
       multiCampaigns: [],
     };
   }
+}
+
+export async function actionSetCampaignAlias(rawUtm: string, campaignId: string): Promise<void> {
+  await upsertCampaignAlias(rawUtm, campaignId);
+  revalidatePath("/data-health");
+  revalidatePath("/");
+  revalidatePath("/paid");
+  revalidatePath("/explorer");
+}
+
+export async function actionDeleteCampaignAlias(normKey: string): Promise<void> {
+  await deleteCampaignAlias(normKey);
+  revalidatePath("/data-health");
+  revalidatePath("/");
+  revalidatePath("/paid");
+  revalidatePath("/explorer");
 }

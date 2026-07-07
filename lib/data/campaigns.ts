@@ -160,3 +160,21 @@ export async function listCampaignsWithOverrides(
   const rows = await listCampaigns();
   return applyOverrides(rows, overrides);
 }
+
+// Lista ligera (id + nombre) de la dimensión `campaigns`, para el selector
+// de "asignar alias" en Data Health. No pasa por la vista de KPIs.
+export type CampaignOption = {
+  id: string;
+  name: string;
+  source: Channel;
+  country: string | null;
+};
+
+export async function listCampaignOptions(): Promise<CampaignOption[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const rows = await fetchAll<{ id: string; campaign_name: string; source: Channel; country_parsed: string | null }>(
+    () => sb.from("campaigns").select("id, campaign_name, source, country_parsed").order("campaign_name"),
+  );
+  return rows.map((r) => ({ id: r.id, name: r.campaign_name, source: r.source, country: r.country_parsed }));
+}
