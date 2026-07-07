@@ -54,6 +54,7 @@ export type DbSyncRun = {
   status: "running" | "ok" | "error";
   rows: number | null;
   last_covered_date: string | null;
+  error_message: string | null;
 };
 
 export type DbContact = {
