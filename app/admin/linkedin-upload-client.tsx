@@ -31,8 +31,14 @@ export function LinkedInCsvUploader() {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Identifica el run nuevo por `id` (watermark tomado ANTES de subir), no
+  // por timestamp — un filtro `started_at >= since` es frágil ante cualquier
+  // desfase de reloj navegador↔servidor: si el servidor va aunque sea un
+  // segundo por detrás, la fila recién creada queda excluida para siempre y
+  // el polling se cuelga en "procesando" aunque el backend ya terminó (esto
+  // es justo lo que pasó: filas 'error' en <100ms, invisibles al poll).
   const pollSyncRun = useCallback(
-    async (since: string, fileName: string) => {
+    async (watermarkId: string | null, fileName: string) => {
       const sb = getSupabase();
       if (!sb) {
         setPhase({ kind: "done", ok: false, error: "Supabase no configurado en el navegador (falta NEXT_PUBLIC_SUPABASE_ANON_KEY)." });
@@ -42,9 +48,8 @@ export function LinkedInCsvUploader() {
       while (Date.now() < deadline) {
         const { data, error } = await sb
           .from("sync_runs")
-          .select("status, rows, last_covered_date, error_message")
+          .select("id, status, rows, last_covered_date, error_message")
           .eq("source", "linkedin")
-          .gte("started_at", since)
           .order("started_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -53,7 +58,7 @@ export function LinkedInCsvUploader() {
           setPhase({ kind: "done", ok: false, error: `Error consultando sync_runs: ${error.message}` });
           return;
         }
-        if (data && data.status !== "running") {
+        if (data && data.id !== watermarkId && data.status !== "running") {
           if (data.status === "ok") {
             setPhase({ kind: "done", ok: true, rows: data.rows, lastCovered: data.last_covered_date });
           } else {
@@ -76,13 +81,25 @@ export function LinkedInCsvUploader() {
   const upload = () => {
     const file = inputRef.current?.files?.[0];
     if (!file) return;
-    const since = new Date().toISOString();
     setPhase({ kind: "uploading", fileName: file.name });
 
     const fd = new FormData();
     fd.set("file", file);
 
     (async () => {
+      const sb = getSupabase();
+      let watermarkId: string | null = null;
+      if (sb) {
+        const { data } = await sb
+          .from("sync_runs")
+          .select("id")
+          .eq("source", "linkedin")
+          .order("started_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        watermarkId = data?.id ?? null;
+      }
+
       try {
         // Las Background Functions responden ~inmediatamente con un 202
         // (aceptado) — el trabajo real sigue corriendo después.
@@ -95,7 +112,7 @@ export function LinkedInCsvUploader() {
         return;
       }
       setPhase({ kind: "processing", fileName: file.name });
-      await pollSyncRun(since, file.name);
+      await pollSyncRun(watermarkId, file.name);
     })();
   };
 
