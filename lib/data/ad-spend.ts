@@ -11,7 +11,7 @@ import {
   aggregateLinkedInAds,
 } from "@/lib/linkedin-ads";
 
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 500;
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
