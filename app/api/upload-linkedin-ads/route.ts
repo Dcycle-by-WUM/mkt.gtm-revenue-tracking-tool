@@ -14,7 +14,7 @@
 // recibe el CSV crudo y lo parsea en el servidor, con los límites de arriba.
 
 import { NextRequest, NextResponse } from "next/server";
-import { ingestLinkedInAdsCsv, ingestLinkedInAggregate } from "@/lib/data/ad-spend";
+import { ingestLinkedInAdsCsv, ingestLinkedInAggregate, type ManualCountry } from "@/lib/data/ad-spend";
 import type { LinkedInAdsAggregate } from "@/lib/linkedin-ads";
 
 export const runtime = "nodejs";
@@ -24,9 +24,17 @@ const MAX_SPEND_ROWS = 200_000; // ~500 campañas × 365 días — muy por encim
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Países que el flujo de revisión puede asignar a mano — el mismo
+// vocabulario que produce parseLinkedInCountry.
+const ALLOWED_COUNTRIES = new Set(["Multi", "Spain", "UK", "USA", "Mexico", "Netherlands", "UAE"]);
+
 // Valida el payload del cliente campo a campo — viene del navegador, no se
 // confía en la forma. Devuelve el agregado tipado o lanza con mensaje claro.
-function validateAggregatePayload(body: unknown): { agg: LinkedInAdsAggregate; rowsParsed: number } {
+function validateAggregatePayload(body: unknown): {
+  agg: LinkedInAdsAggregate;
+  rowsParsed: number;
+  manualCountries: ManualCountry[];
+} {
   if (typeof body !== "object" || body === null) throw new Error("Payload JSON vacío o no-objeto.");
   const b = body as Record<string, unknown>;
   const campaigns = b.campaigns;
@@ -56,9 +64,23 @@ function validateAggregatePayload(body: unknown): { agg: LinkedInAdsAggregate; r
       campaignName: r.campaignName,
       campaignNameNorm: r.campaignNameNorm,
       countryParsed: r.countryParsed,
+      countryUncertain: r.countryUncertain === true,
       firstSeen: r.firstSeen,
       lastSeen: r.lastSeen,
     };
+  });
+
+  // Decisiones manuales de país del flujo de revisión (opcional).
+  const rawManual = Array.isArray(b.manualCountries) ? b.manualCountries : [];
+  const manualCountries: ManualCountry[] = rawManual.map((m, i) => {
+    const r = m as Record<string, unknown>;
+    if (
+      typeof r.campaignName !== "string" || !r.campaignName ||
+      typeof r.country !== "string" || !ALLOWED_COUNTRIES.has(r.country)
+    ) {
+      throw new Error(`Asignación manual de país inválida en el payload (índice ${i}).`);
+    }
+    return { campaignName: r.campaignName, country: r.country };
   });
 
   let totalSpend = 0;
@@ -99,6 +121,7 @@ function validateAggregatePayload(body: unknown): { agg: LinkedInAdsAggregate; r
       dateRange: minDate && maxDate ? { min: minDate, max: maxDate } : null,
     },
     rowsParsed,
+    manualCountries,
   };
 }
 
@@ -107,14 +130,14 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get("content-type") ?? "";
 
     if (contentType.includes("application/json")) {
-      let parsed: { agg: LinkedInAdsAggregate; rowsParsed: number };
+      let parsed: { agg: LinkedInAdsAggregate; rowsParsed: number; manualCountries: ManualCountry[] };
       try {
         parsed = validateAggregatePayload(await req.json());
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         return NextResponse.json({ ok: false, error: msg }, { status: 400 });
       }
-      const summary = await ingestLinkedInAggregate(parsed.agg, parsed.rowsParsed);
+      const summary = await ingestLinkedInAggregate(parsed.agg, parsed.rowsParsed, parsed.manualCountries);
       return NextResponse.json(summary, { status: summary.ok ? 200 : 500 });
     }
 

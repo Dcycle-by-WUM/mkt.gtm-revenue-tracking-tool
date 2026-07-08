@@ -4,8 +4,14 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Panel } from "@/components/Page";
 import { getSupabase } from "@/lib/supabase/client";
-import type { LinkedInIngestSummary } from "@/lib/data/ad-spend";
-import { decodeLinkedInCsv, parseLinkedInAdsCsv, aggregateLinkedInAds } from "@/lib/linkedin-ads";
+import type { LinkedInIngestSummary, ManualCountry } from "@/lib/data/ad-spend";
+import {
+  decodeLinkedInCsv,
+  parseLinkedInAdsCsv,
+  aggregateLinkedInAds,
+  type LinkedInCampaignMeta,
+  type LinkedInCampaignDaySpend,
+} from "@/lib/linkedin-ads";
 import { fmtEur } from "@/lib/kpis";
 
 // El CSV se decodifica, parsea y agrega AQUÍ, en el navegador; al servidor
@@ -19,8 +25,19 @@ import { fmtEur } from "@/lib/kpis";
 // polling contra `sync_runs` como red de seguridad (el run puede haber
 // terminado igualmente en el servidor).
 
+type PendingUpload = {
+  fileName: string;
+  rowsParsed: number;
+  campaigns: LinkedInCampaignMeta[];
+  spendRows: LinkedInCampaignDaySpend[];
+  // Campañas "Multi sin señal" (nombre sin país ni marcador INT/MULTI/…) y
+  // sin override previo: se pregunta el país antes de guardar.
+  ask: string[];
+};
+
 type Phase =
   | { kind: "idle" }
+  | { kind: "review"; pending: PendingUpload }
   | { kind: "uploading"; fileName: string }
   | { kind: "processing"; fileName: string }
   | { kind: "done"; ok: true; summary: LinkedInIngestSummary }
@@ -29,9 +46,14 @@ type Phase =
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min tope de espera en el navegador
 
+// Mismo vocabulario que parseLinkedInCountry (y que valida el servidor).
+const COUNTRY_CHOICES = ["Multi", "Spain", "UK", "USA", "Mexico", "Netherlands", "UAE"] as const;
+
 export function LinkedInCsvUploader() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  // País elegido por campaña en el paso de revisión (nombre → país).
+  const [choices, setChoices] = useState<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Red de seguridad: identifica el run por `id` (watermark tomado ANTES de
@@ -91,35 +113,16 @@ export function LinkedInCsvUploader() {
     [router],
   );
 
-  const upload = () => {
-    const file = inputRef.current?.files?.[0];
-    if (!file) return;
-    setPhase({ kind: "uploading", fileName: file.name });
-
-    (async () => {
-      // 1) Parseo + agregación en el navegador. Un archivo equivocado
-      //    (formato, columnas, delimitador) falla aquí mismo, con mensaje
-      //    concreto y sin tocar el servidor.
-      let payload: string;
-      try {
-        const rawRows = parseLinkedInAdsCsv(decodeLinkedInCsv(await file.arrayBuffer()));
-        if (rawRows.length === 0) {
-          throw new Error("El archivo se leyó pero no contiene filas de datos con Campaign ID.");
-        }
-        const agg = aggregateLinkedInAds(rawRows);
-        payload = JSON.stringify({
-          rowsParsed: rawRows.length,
-          campaigns: agg.campaigns,
-          spendRows: agg.spendRows,
-        });
-      } catch (e) {
-        setPhase({ kind: "done", ok: false, error: e instanceof Error ? e.message : String(e) });
-        return;
-      } finally {
-        // Permite re-seleccionar el mismo archivo (onChange no dispara si
-        // el value no cambia).
-        if (inputRef.current) inputRef.current.value = "";
-      }
+  // Envío del agregado (+ decisiones manuales de país) al servidor.
+  const send = useCallback(
+    async (pending: Omit<PendingUpload, "ask">, manualCountries: ManualCountry[]) => {
+      setPhase({ kind: "uploading", fileName: pending.fileName });
+      const payload = JSON.stringify({
+        rowsParsed: pending.rowsParsed,
+        campaigns: pending.campaigns,
+        spendRows: pending.spendRows,
+        manualCountries,
+      });
 
       const sb = getSupabase();
       let watermarkId: string | null = null;
@@ -134,7 +137,7 @@ export function LinkedInCsvUploader() {
         watermarkId = data?.id ?? null;
       }
 
-      // 2) Solo viaja el agregado campaña×día (KBs, no MBs).
+      // Solo viaja el agregado campaña×día (KBs, no MBs).
       let res: Response;
       let text: string;
       try {
@@ -147,7 +150,7 @@ export function LinkedInCsvUploader() {
       } catch {
         // El fetch falló o se cortó (p.ej. timeout de plataforma a media
         // petición) — el run puede haber terminado igual en el servidor.
-        setPhase({ kind: "processing", fileName: file.name });
+        setPhase({ kind: "processing", fileName: pending.fileName });
         await pollSyncRun(watermarkId);
         return;
       }
@@ -171,7 +174,80 @@ export function LinkedInCsvUploader() {
         setPhase({ kind: "done", ok: false, error: summary.error ?? "Fallo desconocido." });
       }
       router.refresh();
+    },
+    [pollSyncRun, router],
+  );
+
+  const upload = () => {
+    const file = inputRef.current?.files?.[0];
+    if (!file) return;
+    setPhase({ kind: "uploading", fileName: file.name });
+    setChoices({});
+
+    (async () => {
+      // 1) Parseo + agregación en el navegador. Un archivo equivocado
+      //    (formato, columnas, delimitador) falla aquí mismo, con mensaje
+      //    concreto y sin tocar el servidor.
+      let pending: Omit<PendingUpload, "ask">;
+      try {
+        const rawRows = parseLinkedInAdsCsv(decodeLinkedInCsv(await file.arrayBuffer()));
+        if (rawRows.length === 0) {
+          throw new Error("El archivo se leyó pero no contiene filas de datos con Campaign ID.");
+        }
+        const agg = aggregateLinkedInAds(rawRows);
+        pending = {
+          fileName: file.name,
+          rowsParsed: rawRows.length,
+          campaigns: agg.campaigns,
+          spendRows: agg.spendRows,
+        };
+      } catch (e) {
+        setPhase({ kind: "done", ok: false, error: e instanceof Error ? e.message : String(e) });
+        return;
+      } finally {
+        // Permite re-seleccionar el mismo archivo (onChange no dispara si
+        // el value no cambia).
+        if (inputRef.current) inputRef.current.value = "";
+      }
+
+      // 2) Campañas "Multi sin señal" → preguntar el país antes de guardar,
+      //    salvo que ya exista un override de una subida anterior (esas se
+      //    resuelven solas en el servidor y no se vuelve a preguntar).
+      let overridePatterns: string[] = [];
+      const sb = getSupabase();
+      if (sb) {
+        const { data } = await sb.from("country_overrides").select("pattern");
+        overridePatterns = (data ?? []).map((r) => String(r.pattern).toLowerCase());
+      }
+      const ask = pending.campaigns
+        .filter((c) => c.countryUncertain)
+        .filter((c) => {
+          const name = c.campaignName.toLowerCase();
+          return !overridePatterns.some((p) => name.includes(p));
+        })
+        .map((c) => c.campaignName)
+        .sort((a, b) => a.localeCompare(b));
+
+      if (ask.length === 0) {
+        await send(pending, []);
+        return;
+      }
+      setPhase({ kind: "review", pending: { ...pending, ask } });
     })();
+  };
+
+  const confirmReview = (pending: PendingUpload) => {
+    // Toda campaña revisada se persiste como override — también las que se
+    // quedan en Multi — para no volver a preguntar en la próxima subida.
+    const manualCountries: ManualCountry[] = pending.ask.map((name) => ({
+      campaignName: name,
+      country: choices[name] ?? "Multi",
+    }));
+    const byName = new Map(manualCountries.map((m) => [m.campaignName, m.country]));
+    const campaigns = pending.campaigns.map((c) =>
+      byName.has(c.campaignName) ? { ...c, countryParsed: byName.get(c.campaignName)! } : c,
+    );
+    void send({ ...pending, campaigns }, manualCountries);
   };
 
   const busy = phase.kind === "uploading" || phase.kind === "processing";
@@ -204,6 +280,48 @@ export function LinkedInCsvUploader() {
           </span>
         )}
       </div>
+
+      {phase.kind === "review" && (
+        <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm">
+          <div className="mb-2">
+            {phase.pending.ask.length} campañas sin país reconocible en el nombre.
+            Asigna el país antes de guardar — la elección se recuerda para
+            futuras subidas (no se volverá a preguntar por estas campañas):
+          </div>
+          <ul className="space-y-1.5">
+            {phase.pending.ask.map((name) => (
+              <li key={name} className="flex items-center gap-2">
+                <select
+                  value={choices[name] ?? "Multi"}
+                  onChange={(e) => setChoices((prev) => ({ ...prev, [name]: e.target.value }))}
+                  className="rounded border border-[var(--border)] bg-transparent px-1 py-0.5 text-xs"
+                >
+                  {COUNTRY_CHOICES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-[var(--muted)]">{name}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => confirmReview(phase.pending)}
+              className="rounded border border-[var(--border)] px-3 py-1 text-xs hover:bg-white/5"
+            >
+              Confirmar y subir
+            </button>
+            <button
+              onClick={() => setPhase({ kind: "idle" })}
+              className="rounded border border-transparent px-3 py-1 text-xs text-[var(--muted)] hover:border-[var(--border)]"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {phase.kind === "done" && (
         <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm">

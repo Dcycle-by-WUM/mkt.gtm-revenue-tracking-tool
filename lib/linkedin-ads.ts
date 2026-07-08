@@ -63,9 +63,21 @@ function singleCountryToken(tokens: string[]): string | null {
   return specific.size === 1 ? [...specific][0] : null;
 }
 
+// Nombres que anuncian multi-país a propósito (INT genérico, EUROPA…) son
+// "Multi" con confianza; un nombre SIN ninguna señal (ni país ni marcador)
+// cae en Multi solo por defecto → `uncertain`, y el flujo de subida le
+// pregunta el país a quien sube el CSV (decisión Davide, 08-jul).
+const MULTI_MARKERS = new Set(["INT", "INTERNATIONAL", "MULTI", "EUROPA", "EUROPE", "EU"]);
+
+export type ParsedCountry = { country: string; uncertain: boolean };
+
 export function parseLinkedInCountry(campaignName: string): string {
+  return parseLinkedInCountryDetailed(campaignName).country;
+}
+
+export function parseLinkedInCountryDetailed(campaignName: string): ParsedCountry {
   const clean = stripAccents(campaignName.trim()).toUpperCase();
-  if (clean.includes("UNITED KINGDOM")) return "UK";
+  if (clean.includes("UNITED KINGDOM")) return { country: "UK", uncertain: false };
 
   // El país solo se lee de la CABECERA del nombre: lo que va antes del
   // primer "|" o " - ". El resto describe audiencia/oferta y puede citar
@@ -83,15 +95,17 @@ export function parseLinkedInCountry(campaignName: string): string {
     .slice(0, headerEnd)
     .split(/[^A-Z0-9]+/)
     .filter((t) => t && t !== "TIERMULTI");
-  if (tokens.length === 0) return "Multi";
+  if (tokens.length === 0) return { country: "Multi", uncertain: true };
 
-  if (tokens[0] === "ESP" || tokens[0] === "ESPANA") return "Spain";
+  if (tokens[0] === "ESP" || tokens[0] === "ESPANA") return { country: "Spain", uncertain: false };
 
   // Un único token de país reconocido en la cabecera → ese país; 0 (genérico/
   // EUROPA/MULTI) o ≥2 distintos (multi-país real) → Multi. Aplica con y sin
   // prefijo INT_ — el naming legacy ("UK_…", "IP UK…", "MADRID | …") no lo
   // lleva y antes caía en Multi por defecto (bug real, pivot de Davide).
-  return singleCountryToken(tokens) ?? "Multi";
+  const country = singleCountryToken(tokens);
+  if (country) return { country, uncertain: false };
+  return { country: "Multi", uncertain: !tokens.some((t) => MULTI_MARKERS.has(t)) };
 }
 
 // ── Parsing del CSV ────────────────────────────────────────────────────
@@ -286,6 +300,9 @@ export type LinkedInCampaignMeta = {
   campaignName: string;
   campaignNameNorm: string;
   countryParsed: string;
+  // true = "Multi" solo por defecto (nombre sin señal de país ni marcador
+  // multi) — el flujo de subida pregunta el país antes de guardar.
+  countryUncertain: boolean;
   firstSeen: string;
   lastSeen: string;
 };
@@ -344,14 +361,18 @@ export function aggregateLinkedInAds(rows: LinkedInAdRow[]): LinkedInAdsAggregat
   }
 
   const campaigns: LinkedInCampaignMeta[] = [...campaignById.entries()].map(
-    ([platformCampaignId, c]) => ({
-      platformCampaignId,
-      campaignName: c.name,
-      campaignNameNorm: normalizeUtm(c.name),
-      countryParsed: parseLinkedInCountry(c.name),
-      firstSeen: c.firstSeen,
-      lastSeen: c.lastSeen,
-    }),
+    ([platformCampaignId, c]) => {
+      const parsed = parseLinkedInCountryDetailed(c.name);
+      return {
+        platformCampaignId,
+        campaignName: c.name,
+        campaignNameNorm: normalizeUtm(c.name),
+        countryParsed: parsed.country,
+        countryUncertain: parsed.uncertain,
+        firstSeen: c.firstSeen,
+        lastSeen: c.lastSeen,
+      };
+    },
   );
 
   return {

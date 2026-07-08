@@ -43,6 +43,11 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
   return ingestLinkedInAggregate(agg, rawRows.length);
 }
 
+// País asignado a mano por quien sube el CSV (flujo de revisión de campañas
+// "Multi sin señal"). Se persiste en `country_overrides` (pattern = nombre
+// exacto) para que las siguientes subidas lo apliquen sin volver a preguntar.
+export type ManualCountry = { campaignName: string; country: string };
+
 // El run de `sync_runs` se crea ANTES de tocar datos — el cliente hace
 // polling contra esta tabla como red de seguridad si pierde la respuesta
 // HTTP, y necesita encontrar una fila enseguida y verla resolverse a
@@ -50,6 +55,7 @@ export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInI
 export async function ingestLinkedInAggregate(
   agg: LinkedInAdsAggregate,
   rowsParsed: number,
+  manualCountries: ManualCountry[] = [],
 ): Promise<LinkedInIngestSummary> {
   const sb = requireSupabaseAdmin();
 
@@ -64,11 +70,36 @@ export async function ingestLinkedInAggregate(
   const runId = runIns.data.id as string;
 
   try {
+    // 0) Overrides de país. Primero se persisten las decisiones de ESTA
+    //    subida; después se cargan TODOS los overrides (los nuevos + los de
+    //    subidas anteriores) y ganan sobre el país parseado del nombre —
+    //    así re-subir un CSV nunca deshace una atribución manual.
+    if (manualCountries.length > 0) {
+      const seeded = manualCountries.map((m) => ({
+        pattern: m.campaignName,
+        country: m.country,
+        author: "linkedin-upload",
+      }));
+      for (const batch of chunk(seeded, BATCH_SIZE)) {
+        const { error } = await sb.from("country_overrides").upsert(batch, { onConflict: "pattern" });
+        if (error) throw new Error(`upsert country_overrides → ${error.message}`);
+      }
+    }
+    const overrides = await fetchAll<{ pattern: string; country: string }>(
+      () => sb.from("country_overrides").select("pattern, country"),
+    );
+    const countryFor = (c: { campaignName: string; countryParsed: string }): string => {
+      const nameLower = c.campaignName.toLowerCase();
+      const ov = overrides.find((o) => nameLower.includes(o.pattern.toLowerCase()));
+      return ov ? ov.country : c.countryParsed;
+    };
+
     const countryBreakdown: Record<string, number> = {};
     const multiCampaigns: string[] = [];
     for (const c of agg.campaigns) {
-      countryBreakdown[c.countryParsed] = (countryBreakdown[c.countryParsed] ?? 0) + 1;
-      if (c.countryParsed === "Multi") multiCampaigns.push(c.campaignName);
+      const country = countryFor(c);
+      countryBreakdown[country] = (countryBreakdown[country] ?? 0) + 1;
+      if (country === "Multi") multiCampaigns.push(c.campaignName);
     }
 
     // 1) Mezclar first_seen/last_seen con lo que ya hubiera en `campaigns`
@@ -93,7 +124,7 @@ export async function ingestLinkedInAggregate(
         platform_campaign_id: c.platformCampaignId,
         campaign_name: c.campaignName,
         campaign_name_norm: c.campaignNameNorm,
-        country_parsed: c.countryParsed,
+        country_parsed: countryFor(c),
         first_seen: firstSeen,
         last_seen: lastSeen,
       };
