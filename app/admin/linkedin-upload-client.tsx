@@ -5,16 +5,19 @@ import { useRouter } from "next/navigation";
 import { Panel } from "@/components/Page";
 import { getSupabase } from "@/lib/supabase/client";
 import type { LinkedInIngestSummary } from "@/lib/data/ad-spend";
+import { decodeLinkedInCsv, parseLinkedInAdsCsv, aggregateLinkedInAds } from "@/lib/linkedin-ads";
 import { fmtEur } from "@/lib/kpis";
 
-// Sube a app/api/upload-linkedin-ads (Route Handler nativo de Next.js, no
-// una función Netlify a mano — dos intentos con netlify/functions/*.ts
-// devolvieron siempre un 500 genérico de plataforma, todo apunta a que
-// @netlify/plugin-nextjs intercepta el routing de /.netlify/functions/*
-// antes de que llegue a mi función). Espera la respuesta directa; si el
-// fetch falla o se corta a media petición, cae a polling contra `sync_runs`
-// como red de seguridad (el run puede haber terminado igualmente en el
-// servidor aunque la conexión del navegador se haya perdido).
+// El CSV se decodifica, parsea y agrega AQUÍ, en el navegador; al servidor
+// (app/api/upload-linkedin-ads, Route Handler) solo viaja el agregado
+// campaña×día como JSON. Motivo: el export de LinkedIn (Ad × día, UTF-16)
+// puede superar el límite de payload de las funciones de Netlify (~6 MB) —
+// subiendo el CSV crudo, la plataforma lo rechazaba antes de llegar al
+// código y el navegador solo veía un error opaco. De paso, un archivo
+// equivocado o mal formado falla al instante con un mensaje concreto, sin
+// ida y vuelta al servidor. Si el fetch falla a media petición, cae a
+// polling contra `sync_runs` como red de seguridad (el run puede haber
+// terminado igualmente en el servidor).
 
 type Phase =
   | { kind: "idle" }
@@ -93,10 +96,31 @@ export function LinkedInCsvUploader() {
     if (!file) return;
     setPhase({ kind: "uploading", fileName: file.name });
 
-    const fd = new FormData();
-    fd.set("file", file);
-
     (async () => {
+      // 1) Parseo + agregación en el navegador. Un archivo equivocado
+      //    (formato, columnas, delimitador) falla aquí mismo, con mensaje
+      //    concreto y sin tocar el servidor.
+      let payload: string;
+      try {
+        const rawRows = parseLinkedInAdsCsv(decodeLinkedInCsv(await file.arrayBuffer()));
+        if (rawRows.length === 0) {
+          throw new Error("El archivo se leyó pero no contiene filas de datos con Campaign ID.");
+        }
+        const agg = aggregateLinkedInAds(rawRows);
+        payload = JSON.stringify({
+          rowsParsed: rawRows.length,
+          campaigns: agg.campaigns,
+          spendRows: agg.spendRows,
+        });
+      } catch (e) {
+        setPhase({ kind: "done", ok: false, error: e instanceof Error ? e.message : String(e) });
+        return;
+      } finally {
+        // Permite re-seleccionar el mismo archivo (onChange no dispara si
+        // el value no cambia).
+        if (inputRef.current) inputRef.current.value = "";
+      }
+
       const sb = getSupabase();
       let watermarkId: string | null = null;
       if (sb) {
@@ -110,27 +134,43 @@ export function LinkedInCsvUploader() {
         watermarkId = data?.id ?? null;
       }
 
+      // 2) Solo viaja el agregado campaña×día (KBs, no MBs).
+      let res: Response;
+      let text: string;
       try {
-        const res = await fetch("/api/upload-linkedin-ads", { method: "POST", body: fd });
-        const text = await res.text();
-        let summary: LinkedInIngestSummary;
-        try {
-          summary = JSON.parse(text);
-        } catch {
-          throw new Error(`Respuesta no-JSON (HTTP ${res.status}): ${text.slice(0, 300)}`);
-        }
-        if (summary.ok) {
-          setPhase({ kind: "done", ok: true, summary });
-        } else {
-          setPhase({ kind: "done", ok: false, error: summary.error ?? "Fallo desconocido." });
-        }
-        router.refresh();
-      } catch (e) {
+        res = await fetch("/api/upload-linkedin-ads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        });
+        text = await res.text();
+      } catch {
         // El fetch falló o se cortó (p.ej. timeout de plataforma a media
         // petición) — el run puede haber terminado igual en el servidor.
         setPhase({ kind: "processing", fileName: file.name });
         await pollSyncRun(watermarkId);
+        return;
       }
+
+      let summary: LinkedInIngestSummary;
+      try {
+        summary = JSON.parse(text);
+      } catch {
+        // El servidor respondió, pero no fue nuestro handler (p.ej. un error
+        // HTML de la plataforma) — enseñar qué llegó, no enmascararlo.
+        setPhase({
+          kind: "done",
+          ok: false,
+          error: `El servidor respondió HTTP ${res.status} sin JSON: ${text.slice(0, 300) || "(cuerpo vacío)"} — revisa /data-health por si el run llegó a registrarse.`,
+        });
+        return;
+      }
+      if (summary.ok) {
+        setPhase({ kind: "done", ok: true, summary });
+      } else {
+        setPhase({ kind: "done", ok: false, error: summary.error ?? "Fallo desconocido." });
+      }
+      router.refresh();
     })();
   };
 

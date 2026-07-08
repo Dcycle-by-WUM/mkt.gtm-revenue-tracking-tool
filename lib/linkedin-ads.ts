@@ -137,12 +137,31 @@ function tokenizeDelimited(text: string, delimiter: string): string[][] {
   return rows;
 }
 
-// Fechas del export vienen como M/D/YYYY (US) → YYYY-MM-DD.
-function parseUsDate(s: string): string {
-  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s.trim());
-  if (!m) throw new Error(`Fecha inválida en export LinkedIn: "${s}"`);
-  const [, mo, d, y] = m;
+// Fechas del export: M/D/YYYY (US) o YYYY-MM-DD según versión/idioma del
+// Campaign Manager → siempre YYYY-MM-DD.
+function parseExportDate(s: string): string {
+  const t = s.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  if (!us) throw new Error(`Fecha inválida en export LinkedIn: "${s}"`);
+  const [, mo, d, y] = us;
   return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
+
+// Números del export: pueden venir con separador de miles ("1,234.56") o
+// decimal europeo ("1234,56"); Number() a secas daría NaN → 0 silencioso.
+function parseExportNumber(s: string | undefined): number {
+  const t = (s ?? "").trim().replace(/[€$\s]/g, "");
+  if (!t) return 0;
+  let normalized = t;
+  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) {
+    normalized = t.replace(/,/g, ""); // miles US: 1,234.56
+  } else if (/^\d+,\d+$/.test(t)) {
+    normalized = t.replace(",", "."); // decimal europeo: 1234,56
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export type LinkedInAdRow = {
@@ -155,31 +174,56 @@ export type LinkedInAdRow = {
   clicks: number;
 };
 
-// Localiza la fila de cabecera real (el export trae 4-5 líneas de preámbulo
-// con metadatos del reporte antes de la fila de columnas).
-function findHeaderLine(rows: string[][]): number {
-  const idx = rows.findIndex((r) => r[0]?.trim().startsWith("Start Date"));
-  if (idx === -1) {
-    throw new Error(
-      "No se encontró la fila de cabecera ('Start Date...') — ¿es un export de Ad Performance Report?",
-    );
+// El delimitador del export varía según versión/config regional del
+// Campaign Manager (histórico: UTF-16LE + tab; también existe UTF-8 + coma).
+// Se prueba cada candidato y gana el que produce una cabecera con TODAS las
+// columnas requeridas.
+const DELIMITER_CANDIDATES = ["\t", ",", ";"] as const;
+
+type HeaderScan =
+  | { ok: true; rows: string[][]; headerIdx: number; header: string[] }
+  | { ok: false; reason: string };
+
+function scanWithDelimiter(text: string, delimiter: string): HeaderScan {
+  const rows = tokenizeDelimited(text, delimiter).filter((r) => r.some((c) => c.trim() !== ""));
+  // La cabecera real es la fila que contiene TODAS las columnas requeridas
+  // (el preámbulo puede traer filas de metadatos que también empiezan por
+  // "Start Date", así que no vale quedarse con la primera coincidencia).
+  let bestMissing: string[] | null = null;
+  for (let i = 0; i < rows.length; i++) {
+    const header = rows[i].map((c) => c.trim());
+    if (!header.some((c) => c.startsWith("Start Date"))) continue;
+    const missing = REQUIRED_COLUMNS.filter((c) => !header.includes(c));
+    if (missing.length === 0) return { ok: true, rows, headerIdx: i, header };
+    if (!bestMissing || missing.length < bestMissing.length) bestMissing = missing;
   }
-  return idx;
+  if (bestMissing) {
+    return { ok: false, reason: `faltan columnas: ${bestMissing.map((c) => `"${c}"`).join(", ")}` };
+  }
+  return { ok: false, reason: "sin fila de cabecera ('Start Date…')" };
 }
 
 export function parseLinkedInAdsCsv(text: string): LinkedInAdRow[] {
-  const allRows = tokenizeDelimited(text, "\t").filter((r) => r.some((c) => c.trim() !== ""));
-  const headerIdx = findHeaderLine(allRows);
-  const header = allRows[headerIdx].map((c) => c.trim());
-
-  const colIndex: Record<string, number> = {};
-  for (const col of REQUIRED_COLUMNS) {
-    const i = header.indexOf(col);
-    if (i === -1) {
-      throw new Error(`Columna requerida no encontrada en el CSV: "${col}"`);
+  const failures: string[] = [];
+  let scan: Extract<HeaderScan, { ok: true }> | null = null;
+  for (const delimiter of DELIMITER_CANDIDATES) {
+    const attempt = scanWithDelimiter(text, delimiter);
+    if (attempt.ok) {
+      scan = attempt;
+      break;
     }
-    colIndex[col] = i;
+    failures.push(`${delimiter === "\t" ? "tab" : `"${delimiter}"`}: ${attempt.reason}`);
   }
+  if (!scan) {
+    throw new Error(
+      `No se pudo leer el archivo como export "Ad Performance Report" de LinkedIn (${failures.join(" · ")}). ` +
+        "Comprueba que es el CSV exportado desde Campaign Manager → Analyze → Export, tipo de reporte 'Ad Performance'.",
+    );
+  }
+
+  const { rows: allRows, headerIdx, header } = scan;
+  const colIndex: Record<string, number> = {};
+  for (const col of REQUIRED_COLUMNS) colIndex[col] = header.indexOf(col);
 
   const rows: LinkedInAdRow[] = [];
   for (let i = headerIdx + 1; i < allRows.length; i++) {
@@ -189,13 +233,13 @@ export function parseLinkedInAdsCsv(text: string): LinkedInAdRow[] {
     if (!campaignId) continue;
 
     rows.push({
-      date: parseUsDate(cells[colIndex["Start Date (in UTC)"]]),
+      date: parseExportDate(cells[colIndex["Start Date (in UTC)"]]),
       platformCampaignId: campaignId,
       campaignName: cells[colIndex["Campaign Name"]].trim(),
       currency: cells[colIndex["Currency"]]?.trim() || "EUR",
-      spend: Number(cells[colIndex["Total Spent"]]) || 0,
-      impressions: Number(cells[colIndex["Impressions"]]) || 0,
-      clicks: Number(cells[colIndex["Clicks"]]) || 0,
+      spend: parseExportNumber(cells[colIndex["Total Spent"]]),
+      impressions: Math.round(parseExportNumber(cells[colIndex["Impressions"]])),
+      clicks: Math.round(parseExportNumber(cells[colIndex["Clicks"]])),
     });
   }
   return rows;
@@ -296,10 +340,13 @@ export function aggregateLinkedInAds(rows: LinkedInAdRow[]): LinkedInAdsAggregat
   };
 }
 
-// Decodifica el archivo subido: LinkedIn exporta en UTF-16LE con BOM.
+// Decodifica el archivo subido: LinkedIn exporta históricamente en UTF-16LE
+// con BOM; otras variantes llegan en UTF-8 (con o sin BOM) o UTF-16BE.
 export function decodeLinkedInCsv(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
-  const isUtf16Le = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
-  const decoder = new TextDecoder(isUtf16Le ? "utf-16le" : "utf-8");
-  return decoder.decode(buf);
+  let encoding = "utf-8";
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) encoding = "utf-16le";
+  else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) encoding = "utf-16be";
+  // TextDecoder ya descarta el BOM tanto en UTF-8 como en UTF-16.
+  return new TextDecoder(encoding).decode(buf);
 }
