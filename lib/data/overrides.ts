@@ -4,6 +4,7 @@
 
 import { getSupabase } from "@/lib/supabase/client";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { normalizeCountryLabel } from "@/lib/linkedin-ads";
 import type { CountryOverrides } from "@/lib/mock-data";
 
 export async function listCountryOverrides(): Promise<CountryOverrides> {
@@ -11,7 +12,9 @@ export async function listCountryOverrides(): Promise<CountryOverrides> {
   if (!sb) return {};
   const { data, error } = await sb.from("country_overrides").select("pattern, country");
   if (error || !data) return {};
-  return Object.fromEntries(data.map((r) => [r.pattern, r.country]));
+  // País normalizado al vocabulario del parser ("ES" → "Spain") para que un
+  // override legacy no parta un país en dos buckets distintos en pantalla.
+  return Object.fromEntries(data.map((r) => [r.pattern, normalizeCountryLabel(r.country)]));
 }
 
 export async function upsertCountryOverride(pattern: string, country: string): Promise<void> {

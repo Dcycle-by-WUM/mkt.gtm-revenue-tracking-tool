@@ -9,6 +9,7 @@ import {
   decodeLinkedInCsv,
   parseLinkedInAdsCsv,
   aggregateLinkedInAds,
+  normalizeCountryLabel,
   type LinkedInCampaignMeta,
   type LinkedInCampaignDaySpend,
 } from "@/lib/linkedin-ads";
@@ -210,27 +211,35 @@ export function LinkedInCsvUploader() {
         if (inputRef.current) inputRef.current.value = "";
       }
 
-      // 2) Campañas "Multi sin señal" → preguntar el país antes de guardar,
-      //    salvo que ya exista un override de una subida anterior (esas se
-      //    resuelven solas en el servidor y no se vuelve a preguntar).
-      let overridePatterns: string[] = [];
-      const sb = getSupabase();
-      if (sb) {
-        const { data } = await sb.from("country_overrides").select("pattern");
-        overridePatterns = (data ?? []).map((r) => String(r.pattern).toLowerCase());
-      }
+      // 2) Campañas "Multi sin señal" → preguntar SIEMPRE el país antes de
+      //    guardar. Si ya hay una decisión de una subida anterior
+      //    (country_overrides, coincidencia EXACTA por nombre) se pre-rellena
+      //    el selector — confirmar es un clic, pero queda a la vista y se
+      //    puede corregir.
       const ask = pending.campaigns
         .filter((c) => c.countryUncertain)
-        .filter((c) => {
-          const name = c.campaignName.toLowerCase();
-          return !overridePatterns.some((p) => name.includes(p));
-        })
         .map((c) => c.campaignName)
         .sort((a, b) => a.localeCompare(b));
 
       if (ask.length === 0) {
         await send(pending, []);
         return;
+      }
+
+      const sb = getSupabase();
+      if (sb) {
+        const { data } = await sb.from("country_overrides").select("pattern, country");
+        if (data) {
+          const stored = new Map(
+            data.map((r) => [String(r.pattern).trim().toLowerCase(), normalizeCountryLabel(String(r.country))]),
+          );
+          const prefill: Record<string, string> = {};
+          for (const name of ask) {
+            const prev = stored.get(name.trim().toLowerCase());
+            if (prev && (COUNTRY_CHOICES as readonly string[]).includes(prev)) prefill[name] = prev;
+          }
+          setChoices(prefill);
+        }
       }
       setPhase({ kind: "review", pending: { ...pending, ask } });
     })();

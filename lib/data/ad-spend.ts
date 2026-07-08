@@ -9,6 +9,7 @@ import {
   decodeLinkedInCsv,
   parseLinkedInAdsCsv,
   aggregateLinkedInAds,
+  normalizeCountryLabel,
   type LinkedInAdsAggregate,
 } from "@/lib/linkedin-ads";
 
@@ -88,11 +89,16 @@ export async function ingestLinkedInAggregate(
     const overrides = await fetchAll<{ pattern: string; country: string }>(
       () => sb.from("country_overrides").select("pattern, country"),
     );
-    const countryFor = (c: { campaignName: string; countryParsed: string }): string => {
-      const nameLower = c.campaignName.toLowerCase();
-      const ov = overrides.find((o) => nameLower.includes(o.pattern.toLowerCase()));
-      return ov ? ov.country : c.countryParsed;
-    };
+    // Solo coincidencia EXACTA por nombre (mismo criterio que applyOverrides
+    // en la capa de lectura). Los patrones sueltos legacy ("MEX_", "[UK]"…)
+    // NO se aplican aquí: por substring reasignarían campañas que el parser
+    // ya resuelve bien (bug real, detectado el 08-jul). El país almacenado
+    // se normaliza al vocabulario del parser ("ES" → "Spain").
+    const overrideByName = new Map(
+      overrides.map((o) => [o.pattern.trim().toLowerCase(), normalizeCountryLabel(o.country)]),
+    );
+    const countryFor = (c: { campaignName: string; countryParsed: string }): string =>
+      overrideByName.get(c.campaignName.trim().toLowerCase()) ?? c.countryParsed;
 
     const countryBreakdown: Record<string, number> = {};
     const multiCampaigns: string[] = [];

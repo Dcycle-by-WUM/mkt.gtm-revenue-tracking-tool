@@ -63,6 +63,25 @@ function singleCountryToken(tokens: string[]): string | null {
   return specific.size === 1 ? [...specific][0] : null;
 }
 
+// Etiquetas de país almacenadas (country_overrides, ediciones manuales…)
+// pueden venir en otro vocabulario ("ES", "España", "NETHERLAND") — se
+// normalizan al canon del parser para no fragmentar los buckets del
+// desglose ("ES" y "Spain" serían dos países distintos en la vista).
+const COUNTRY_LABELS: Record<string, string> = {
+  ES: "Spain", ESP: "Spain", ESPANA: "Spain", SPAIN: "Spain",
+  UK: "UK", GB: "UK", "UNITED KINGDOM": "UK",
+  US: "USA", USA: "USA", EEUU: "USA", "UNITED STATES": "USA",
+  MX: "Mexico", MEX: "Mexico", MEXICO: "Mexico",
+  NL: "Netherlands", NETHERLANDS: "Netherlands", NETHERLAND: "Netherlands", HOLANDA: "Netherlands",
+  UAE: "UAE", EAU: "UAE", ARAB: "UAE",
+  MULTI: "Multi",
+};
+
+export function normalizeCountryLabel(value: string): string {
+  const key = stripAccents(value.trim()).toUpperCase();
+  return COUNTRY_LABELS[key] ?? value.trim();
+}
+
 // Nombres que anuncian multi-país a propósito (INT genérico, EUROPA…) son
 // "Multi" con confianza; un nombre SIN ninguna señal (ni país ni marcador)
 // cae en Multi solo por defecto → `uncertain`, y el flujo de subida le
