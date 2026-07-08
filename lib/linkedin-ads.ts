@@ -30,8 +30,14 @@ function stripAccents(s: string): string {
     .join("");
 }
 
+// Ciudades/regiones cuentan como su país (mismo criterio que CALIFORNIA→USA):
+// el naming real usa LONDRES/AMSTERDAM/MADRID para campañas de evento locales.
+// ESP/ESPANA también como token (no solo como prefijo): hay campañas
+// "Dcycle / ESP_..." donde ESP no es el primer token.
 const COUNTRY_TOKENS: Record<string, string> = {
   UK: "UK",
+  LONDRES: "UK",
+  LONDON: "UK",
   USA: "USA",
   CALIFORNIA: "USA",
   MEXICO: "Mexico",
@@ -40,6 +46,10 @@ const COUNTRY_TOKENS: Record<string, string> = {
   DUTCH: "Netherlands",
   NETHERLANDS: "Netherlands",
   EAU: "UAE",
+  EMIRATOS: "UAE",
+  ESP: "Spain",
+  ESPANA: "Spain",
+  MADRID: "Spain",
 };
 
 // Exactamente un país específico entre los tokens → ese país gana, aunque
@@ -57,19 +67,30 @@ export function parseLinkedInCountry(campaignName: string): string {
   const clean = stripAccents(campaignName.trim()).toUpperCase();
   if (clean.includes("UNITED KINGDOM")) return "UK";
 
+  // El país solo se lee de la CABECERA del nombre: lo que va antes del
+  // primer "|" o " - ". El resto describe audiencia/oferta y puede citar
+  // países que no determinan el targeting (p.ej. "…[BOFU] - 50$ Amazon -
+  // CIOs - UK" o "…Stop reporting Twice - Davide | UK 16k" son Multi).
+  // Regla validada contra la tabla de atribución manual de Davide (08-jul):
+  // 306 campañas, el criterio cabecera + tokens resuelve ~92%.
+  const pipeIdx = clean.indexOf("|");
+  const dashIdx = clean.indexOf(" - ");
+  let headerEnd = clean.length;
+  if (pipeIdx !== -1 && pipeIdx < headerEnd) headerEnd = pipeIdx;
+  if (dashIdx !== -1 && dashIdx < headerEnd) headerEnd = dashIdx;
+
   const tokens = clean
+    .slice(0, headerEnd)
     .split(/[^A-Z0-9]+/)
     .filter((t) => t && t !== "TIERMULTI");
   if (tokens.length === 0) return "Multi";
 
   if (tokens[0] === "ESP" || tokens[0] === "ESPANA") return "Spain";
 
-  // INT/INTERNATIONAL con código de país, o naming legacy sin prefijo
-  // (p.ej. "UK_Q1_ABM_Spring") — mismo criterio de token de país reconocido,
-  // regla histórica de lib/country.ts y DECISIONES.md #2 ("UK/INT_..._UK_...
-  // → UK"). Antes esto solo se evaluaba bajo prefijo INT_, así que campañas
-  // "UK_..." sueltas (previas a la convención INT_/ESP_) caían en Multi por
-  // defecto — bug real, detectado al comparar contra pivot de Davide.
+  // Un único token de país reconocido en la cabecera → ese país; 0 (genérico/
+  // EUROPA/MULTI) o ≥2 distintos (multi-país real) → Multi. Aplica con y sin
+  // prefijo INT_ — el naming legacy ("UK_…", "IP UK…", "MADRID | …") no lo
+  // lleva y antes caía en Multi por defecto (bug real, pivot de Davide).
   return singleCountryToken(tokens) ?? "Multi";
 }
 
