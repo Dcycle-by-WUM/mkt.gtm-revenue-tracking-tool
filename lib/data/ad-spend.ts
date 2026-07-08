@@ -31,6 +31,9 @@ export type LinkedInIngestSummary = {
   dateRange: { min: string; max: string } | null;
   countryBreakdown: Record<string, number>; // país → nº de campañas
   multiCampaigns: string[]; // nombres clasificados como "Multi" (para revisar)
+  // false = los datos se guardaron pero el refresh de las vistas falló →
+  // el dashboard sigue mostrando cifras antiguas hasta el próximo refresh.
+  viewsRefreshed?: boolean;
 };
 
 // Compat: ruta legacy que recibe el CSV crudo y lo parsea en el servidor.
@@ -186,9 +189,19 @@ export async function ingestLinkedInAggregate(
       })
       .eq("id", runId);
 
+    // OJO: supabase-js NO lanza en rpc() — devuelve { error }. El try/catch
+    // solo cubre fallos de red; el error del RPC hay que mirarlo a mano
+    // (antes se tragaba en silencio y el dashboard se quedaba con las
+    // vistas materializadas sin refrescar, como si la subida no hiciera nada).
+    let viewsRefreshed = true;
     try {
-      await sb.rpc("refresh_kpi_views");
+      const { error } = await sb.rpc("refresh_kpi_views");
+      if (error) {
+        viewsRefreshed = false;
+        console.error(`[linkedin-ads] refresh_kpi_views failed: ${error.message}`);
+      }
     } catch (e) {
+      viewsRefreshed = false;
       console.error(`[linkedin-ads] refresh_kpi_views failed: ${e instanceof Error ? e.message : e}`);
     }
 
@@ -201,6 +214,7 @@ export async function ingestLinkedInAggregate(
       dateRange: agg.dateRange,
       countryBreakdown,
       multiCampaigns,
+      viewsRefreshed,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

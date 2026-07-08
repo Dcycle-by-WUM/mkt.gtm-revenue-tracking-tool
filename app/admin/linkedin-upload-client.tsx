@@ -356,6 +356,13 @@ export function LinkedInCsvUploader() {
                     .join(" · ")}
                 </div>
               )}
+              {phase.summary.viewsRefreshed === false && (
+                <div className="mt-2 text-amber-300">
+                  ⚠ Los datos se guardaron, pero el refresh de las vistas falló:
+                  el dashboard puede seguir mostrando cifras antiguas. Vuelve a
+                  subir el archivo para reintentar el refresh.
+                </div>
+              )}
               {phase.summary.multiCampaigns.length > 0 && (
                 <details className="mt-2 text-xs text-[var(--muted)]">
                   <summary className="cursor-pointer">
