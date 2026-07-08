@@ -30,8 +30,14 @@ function stripAccents(s: string): string {
     .join("");
 }
 
+// Ciudades/regiones cuentan como su país (mismo criterio que CALIFORNIA→USA):
+// el naming real usa LONDRES/AMSTERDAM/MADRID para campañas de evento locales.
+// ESP/ESPANA también como token (no solo como prefijo): hay campañas
+// "Dcycle / ESP_..." donde ESP no es el primer token.
 const COUNTRY_TOKENS: Record<string, string> = {
   UK: "UK",
+  LONDRES: "UK",
+  LONDON: "UK",
   USA: "USA",
   CALIFORNIA: "USA",
   MEXICO: "Mexico",
@@ -40,33 +46,86 @@ const COUNTRY_TOKENS: Record<string, string> = {
   DUTCH: "Netherlands",
   NETHERLANDS: "Netherlands",
   EAU: "UAE",
+  EMIRATOS: "UAE",
+  ESP: "Spain",
+  ESPANA: "Spain",
+  MADRID: "Spain",
 };
 
+function countryTokenSet(tokens: string[]): Set<string> {
+  const specific = new Set<string>();
+  for (const t of tokens) {
+    if (t in COUNTRY_TOKENS) specific.add(COUNTRY_TOKENS[t]);
+  }
+  return specific;
+}
+
+// Etiquetas de país almacenadas (country_overrides, ediciones manuales…)
+// pueden venir en otro vocabulario ("ES", "España", "NETHERLAND") — se
+// normalizan al canon del parser para no fragmentar los buckets del
+// desglose ("ES" y "Spain" serían dos países distintos en la vista).
+const COUNTRY_LABELS: Record<string, string> = {
+  ES: "Spain", ESP: "Spain", ESPANA: "Spain", SPAIN: "Spain",
+  UK: "UK", GB: "UK", "UNITED KINGDOM": "UK",
+  US: "USA", USA: "USA", EEUU: "USA", "UNITED STATES": "USA",
+  MX: "Mexico", MEX: "Mexico", MEXICO: "Mexico",
+  NL: "Netherlands", NETHERLANDS: "Netherlands", NETHERLAND: "Netherlands", HOLANDA: "Netherlands",
+  UAE: "UAE", EAU: "UAE", ARAB: "UAE",
+  MULTI: "Multi",
+};
+
+export function normalizeCountryLabel(value: string): string {
+  const key = stripAccents(value.trim()).toUpperCase();
+  return COUNTRY_LABELS[key] ?? value.trim();
+}
+
+// Nombres que anuncian multi-país a propósito (INT genérico, EUROPA…) son
+// "Multi" con confianza; un nombre SIN ninguna señal (ni país ni marcador)
+// cae en Multi solo por defecto → `uncertain`, y el flujo de subida le
+// pregunta el país a quien sube el CSV (decisión Davide, 08-jul).
+const MULTI_MARKERS = new Set(["INT", "INTERNATIONAL", "MULTI", "EUROPA", "EUROPE", "EU"]);
+
+export type ParsedCountry = { country: string; uncertain: boolean };
+
 export function parseLinkedInCountry(campaignName: string): string {
+  return parseLinkedInCountryDetailed(campaignName).country;
+}
+
+export function parseLinkedInCountryDetailed(campaignName: string): ParsedCountry {
   const clean = stripAccents(campaignName.trim()).toUpperCase();
-  if (clean.includes("UNITED KINGDOM")) return "UK";
+  if (clean.includes("UNITED KINGDOM")) return { country: "UK", uncertain: false };
+
+  // El país solo se lee de la CABECERA del nombre: lo que va antes del
+  // primer "|" o " - ". El resto describe audiencia/oferta y puede citar
+  // países que no determinan el targeting (p.ej. "…[BOFU] - 50$ Amazon -
+  // CIOs - UK" o "…Stop reporting Twice - Davide | UK 16k" son Multi).
+  // Regla validada contra la tabla de atribución manual de Davide (08-jul):
+  // 306 campañas, el criterio cabecera + tokens resuelve ~92%.
+  const pipeIdx = clean.indexOf("|");
+  const dashIdx = clean.indexOf(" - ");
+  let headerEnd = clean.length;
+  if (pipeIdx !== -1 && pipeIdx < headerEnd) headerEnd = pipeIdx;
+  if (dashIdx !== -1 && dashIdx < headerEnd) headerEnd = dashIdx;
 
   const tokens = clean
+    .slice(0, headerEnd)
     .split(/[^A-Z0-9]+/)
     .filter((t) => t && t !== "TIERMULTI");
-  if (tokens.length === 0) return "Multi";
+  if (tokens.length === 0) return { country: "Multi", uncertain: true };
 
-  if (tokens[0] === "ESP" || tokens[0] === "ESPANA") return "Spain";
+  if (tokens[0] === "ESP" || tokens[0] === "ESPANA") return { country: "Spain", uncertain: false };
 
-  if (tokens[0] === "INT" || tokens[0] === "INTERNATIONAL") {
-    const specific = new Set<string>();
-    for (const t of tokens) {
-      if (t in COUNTRY_TOKENS) specific.add(COUNTRY_TOKENS[t]);
-    }
-    // Exactamente un país específico → ese país gana, aunque "MULTI"/"EUROPA"
-    // también aparezca en el nombre. 0 países (genérico) o ≥2 distintos
-    // (campaña multi-país real) → Multi.
-    if (specific.size === 1) return [...specific][0];
-    return "Multi";
-  }
-
-  // Sin prefijo ESP/INT (naming legacy/suelto) → Multi por defecto.
-  return "Multi";
+  // Un único token de país reconocido en la cabecera → ese país; 0 (genérico/
+  // EUROPA/MULTI) o ≥2 distintos → Multi. Aplica con y sin prefijo INT_ —
+  // el naming legacy ("UK_…", "IP UK…", "MADRID | …") no lo lleva y antes
+  // caía en Multi por defecto (bug real, pivot de Davide).
+  const countries = countryTokenSet(tokens);
+  if (countries.size === 1) return { country: [...countries][0], uncertain: false };
+  // ≥2 países explícitos ("UK & USA") → Multi por defecto, pero se pregunta:
+  // el negocio puede querer atribuir la campaña a uno de los dos (caso real:
+  // "INT_VIDEO_UK & USA_…" contaba como UK en el pivot de referencia).
+  if (countries.size >= 2) return { country: "Multi", uncertain: true };
+  return { country: "Multi", uncertain: !tokens.some((t) => MULTI_MARKERS.has(t)) };
 }
 
 // ── Parsing del CSV ────────────────────────────────────────────────────
@@ -261,6 +320,9 @@ export type LinkedInCampaignMeta = {
   campaignName: string;
   campaignNameNorm: string;
   countryParsed: string;
+  // true = "Multi" solo por defecto (nombre sin señal de país ni marcador
+  // multi) — el flujo de subida pregunta el país antes de guardar.
+  countryUncertain: boolean;
   firstSeen: string;
   lastSeen: string;
 };
@@ -319,14 +381,18 @@ export function aggregateLinkedInAds(rows: LinkedInAdRow[]): LinkedInAdsAggregat
   }
 
   const campaigns: LinkedInCampaignMeta[] = [...campaignById.entries()].map(
-    ([platformCampaignId, c]) => ({
-      platformCampaignId,
-      campaignName: c.name,
-      campaignNameNorm: normalizeUtm(c.name),
-      countryParsed: parseLinkedInCountry(c.name),
-      firstSeen: c.firstSeen,
-      lastSeen: c.lastSeen,
-    }),
+    ([platformCampaignId, c]) => {
+      const parsed = parseLinkedInCountryDetailed(c.name);
+      return {
+        platformCampaignId,
+        campaignName: c.name,
+        campaignNameNorm: normalizeUtm(c.name),
+        countryParsed: parsed.country,
+        countryUncertain: parsed.uncertain,
+        firstSeen: c.firstSeen,
+        lastSeen: c.lastSeen,
+      };
+    },
   );
 
   return {
