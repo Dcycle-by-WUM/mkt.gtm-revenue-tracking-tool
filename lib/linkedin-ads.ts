@@ -52,15 +52,12 @@ const COUNTRY_TOKENS: Record<string, string> = {
   MADRID: "Spain",
 };
 
-// Exactamente un país específico entre los tokens → ese país gana, aunque
-// "MULTI"/"EUROPA" también aparezca en el nombre. 0 países (genérico) o ≥2
-// distintos (campaña multi-país real) → null (llamador decide el default).
-function singleCountryToken(tokens: string[]): string | null {
+function countryTokenSet(tokens: string[]): Set<string> {
   const specific = new Set<string>();
   for (const t of tokens) {
     if (t in COUNTRY_TOKENS) specific.add(COUNTRY_TOKENS[t]);
   }
-  return specific.size === 1 ? [...specific][0] : null;
+  return specific;
 }
 
 // Etiquetas de país almacenadas (country_overrides, ediciones manuales…)
@@ -119,11 +116,15 @@ export function parseLinkedInCountryDetailed(campaignName: string): ParsedCountr
   if (tokens[0] === "ESP" || tokens[0] === "ESPANA") return { country: "Spain", uncertain: false };
 
   // Un único token de país reconocido en la cabecera → ese país; 0 (genérico/
-  // EUROPA/MULTI) o ≥2 distintos (multi-país real) → Multi. Aplica con y sin
-  // prefijo INT_ — el naming legacy ("UK_…", "IP UK…", "MADRID | …") no lo
-  // lleva y antes caía en Multi por defecto (bug real, pivot de Davide).
-  const country = singleCountryToken(tokens);
-  if (country) return { country, uncertain: false };
+  // EUROPA/MULTI) o ≥2 distintos → Multi. Aplica con y sin prefijo INT_ —
+  // el naming legacy ("UK_…", "IP UK…", "MADRID | …") no lo lleva y antes
+  // caía en Multi por defecto (bug real, pivot de Davide).
+  const countries = countryTokenSet(tokens);
+  if (countries.size === 1) return { country: [...countries][0], uncertain: false };
+  // ≥2 países explícitos ("UK & USA") → Multi por defecto, pero se pregunta:
+  // el negocio puede querer atribuir la campaña a uno de los dos (caso real:
+  // "INT_VIDEO_UK & USA_…" contaba como UK en el pivot de referencia).
+  if (countries.size >= 2) return { country: "Multi", uncertain: true };
   return { country: "Multi", uncertain: !tokens.some((t) => MULTI_MARKERS.has(t)) };
 }
 
