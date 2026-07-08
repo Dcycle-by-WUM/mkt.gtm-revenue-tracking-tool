@@ -42,6 +42,17 @@ const COUNTRY_TOKENS: Record<string, string> = {
   EAU: "UAE",
 };
 
+// Exactamente un país específico entre los tokens → ese país gana, aunque
+// "MULTI"/"EUROPA" también aparezca en el nombre. 0 países (genérico) o ≥2
+// distintos (campaña multi-país real) → null (llamador decide el default).
+function singleCountryToken(tokens: string[]): string | null {
+  const specific = new Set<string>();
+  for (const t of tokens) {
+    if (t in COUNTRY_TOKENS) specific.add(COUNTRY_TOKENS[t]);
+  }
+  return specific.size === 1 ? [...specific][0] : null;
+}
+
 export function parseLinkedInCountry(campaignName: string): string {
   const clean = stripAccents(campaignName.trim()).toUpperCase();
   if (clean.includes("UNITED KINGDOM")) return "UK";
@@ -53,20 +64,13 @@ export function parseLinkedInCountry(campaignName: string): string {
 
   if (tokens[0] === "ESP" || tokens[0] === "ESPANA") return "Spain";
 
-  if (tokens[0] === "INT" || tokens[0] === "INTERNATIONAL") {
-    const specific = new Set<string>();
-    for (const t of tokens) {
-      if (t in COUNTRY_TOKENS) specific.add(COUNTRY_TOKENS[t]);
-    }
-    // Exactamente un país específico → ese país gana, aunque "MULTI"/"EUROPA"
-    // también aparezca en el nombre. 0 países (genérico) o ≥2 distintos
-    // (campaña multi-país real) → Multi.
-    if (specific.size === 1) return [...specific][0];
-    return "Multi";
-  }
-
-  // Sin prefijo ESP/INT (naming legacy/suelto) → Multi por defecto.
-  return "Multi";
+  // INT/INTERNATIONAL con código de país, o naming legacy sin prefijo
+  // (p.ej. "UK_Q1_ABM_Spring") — mismo criterio de token de país reconocido,
+  // regla histórica de lib/country.ts y DECISIONES.md #2 ("UK/INT_..._UK_...
+  // → UK"). Antes esto solo se evaluaba bajo prefijo INT_, así que campañas
+  // "UK_..." sueltas (previas a la convención INT_/ESP_) caían en Multi por
+  // defecto — bug real, detectado al comparar contra pivot de Davide.
+  return singleCountryToken(tokens) ?? "Multi";
 }
 
 // ── Parsing del CSV ────────────────────────────────────────────────────
