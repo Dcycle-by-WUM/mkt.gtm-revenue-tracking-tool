@@ -11,7 +11,7 @@ import { fmtEur, fmtPct } from "@/lib/kpis";
 import { actionUpsertTarget, actionDeleteTarget } from "@/app/actions";
 
 function pacing(pct: number) {
-  const cls = pct >= 1 ? "bg-emerald-500/15 text-emerald-300" : pct >= 0.85 ? "bg-amber-500/15 text-amber-300" : "bg-red-500/15 text-red-300";
+  const cls = pct >= 1 ? "bg-[var(--good-bg)] text-[var(--good-text)]" : pct >= 0.85 ? "bg-[var(--warn-bg)] text-[var(--warn-text)]" : "bg-red-50 text-red-700";
   return <span className={`rounded px-2 py-1 text-xs ${cls}`}>{fmtPct(pct)}</span>;
 }
 
@@ -76,9 +76,9 @@ export function ForecastClient({
         channels={[...new Set([...rows.map((r) => r.channel), ...campaigns.map((c) => c.channel)])].sort()}
       />
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--panel)] text-left text-xs uppercase text-[var(--muted)]">
+          <thead className="bg-[var(--subtle)] text-left text-xs uppercase text-[var(--muted)]">
             <tr>
               <th className="px-3 py-3">Canal</th>
               <th className="px-3 py-3">Mes</th>

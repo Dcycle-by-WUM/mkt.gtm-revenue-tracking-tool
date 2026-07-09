@@ -1,12 +1,25 @@
 @import "tailwindcss";
 
+/* Tema claro — rediseño jul-2026 (petición de Davide: menos oscuro, más
+   moderno). Todos los componentes consumen SOLO estos tokens; nada de
+   colores sueltos que asuman fondo oscuro. */
 :root {
-  --bg: #0b0f14;
-  --panel: #131a22;
-  --border: #1f2a36;
-  --text: #e6edf3;
-  --muted: #8b97a6;
-  --accent: #3fb950;
+  --bg: #f6f7f9;             /* lienzo general, gris muy suave */
+  --panel: #ffffff;          /* tarjetas / tablas / sidebar */
+  --border: #e4e7ec;         /* bordes hairline */
+  --text: #101828;           /* tinta principal */
+  --muted: #667085;          /* tinta secundaria */
+  --accent: #0e7a3d;         /* verde Dcycle, legible sobre blanco */
+  --accent-soft: #e8f5ee;    /* fondo suave del accent (chips activos) */
+  --subtle: #f2f4f7;         /* hover / zebra / chips neutros */
+  --subtle-hover: #e9ecf1;
+  --warn-bg: #fffaeb;        /* banners de aviso */
+  --warn-border: #fedf89;
+  --warn-text: #93370d;
+  --good-bg: #ecfdf3;        /* estados positivos (won, cohorte 2026) */
+  --good-text: #067647;
+  --info-bg: #eff8ff;        /* estados informativos */
+  --info-text: #175cd3;
 }
 
 html,
@@ -14,4 +27,31 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Tarjeta estándar: borde hairline + sombra apenas perceptible. */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+/* Controles de formulario coherentes en toda la app. */
+.control {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text);
+}
+.control:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }

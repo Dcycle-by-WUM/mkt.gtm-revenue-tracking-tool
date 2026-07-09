@@ -6,26 +6,34 @@ import { PivotTable } from "@/components/PivotTable";
 import { MonthlyFunnelTable, ChannelTotalsTable } from "@/components/MonthlyFunnelTable";
 import {
   filterCampaigns,
-  countriesOf,
+  paidCountriesOf,
   monthsOf,
   sumMetrics,
   emptyFilters,
   type CampaignRow,
 } from "@/lib/mock-data";
+import type { CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtNum, fmtPct, roi, mqlRate, sqlRate } from "@/lib/kpis";
 
-export function OverviewClient({ initial }: { initial: CampaignRow[] }) {
+export function OverviewClient({
+  initial,
+  groups,
+}: {
+  initial: CampaignRow[];
+  groups: CountryGroups;
+}) {
   const [filters, setFilters] = useState(emptyFilters);
-  const rows = filterCampaigns(initial, filters);
+  const rows = filterCampaigns(initial, filters, groups);
   const t = sumMetrics(rows);
   const months = monthsOf(initial);
   const channels = [...new Set(initial.map((r) => r.channel))].sort();
 
-  // Funnel mensual: respeta país + canal del filtro pero ignora el mes — el
-  // mes es el eje de fila de estas tablas, filtrarlo las dejaría en 1 fila.
-  const monthlyRows = filterCampaigns(initial, { ...filters, month: "" });
+  // Funnel mensual: respeta región/país/canal del filtro pero ignora el mes
+  // — el mes es el eje de fila de estas tablas.
+  const monthlyRows = filterCampaigns(initial, { ...filters, month: "" }, groups);
   const linkedinRows = monthlyRows.filter((r) => r.channel === "LinkedIn");
   const googleRows = monthlyRows.filter((r) => r.channel === "Google");
+  const paidRows = monthlyRows.filter((r) => r.channel !== "Otros");
   const organicRows = monthlyRows.filter((r) => r.channel === "Otros");
 
   const cards = [
@@ -40,35 +48,39 @@ export function OverviewClient({ initial }: { initial: CampaignRow[] }) {
     { label: "% SQL/MQL", value: fmtPct(sqlRate(t)) },
   ];
 
+  const scopeLabel = filters.country || filters.region || "Todas las regiones";
+
   return (
     <>
       <FilterBar
         filters={filters}
         setFilters={setFilters}
-        countries={countriesOf(initial)}
+        countries={paidCountriesOf(initial)}
         months={months}
         channels={channels}
+        groups={groups}
       />
 
-      <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-3">
+      <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {cards.map((c) => (
-          <div key={c.label} className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-5">
-            <div className="text-xs uppercase tracking-wide text-[var(--muted)]">{c.label}</div>
-            <div className="mt-2 text-2xl font-semibold tabular-nums">{c.value}</div>
+          <div key={c.label} className="card p-4">
+            <div className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{c.label}</div>
+            <div className="mt-1.5 text-xl font-semibold tabular-nums">{c.value}</div>
           </div>
         ))}
       </div>
 
-      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-        Funnel mensual por canal
+      {/* Bloques mensuales — mismo orden que la hoja FORECASTS (METRICAS):
+          LinkedIn → Google → Paid Total → Orgánico → Total. */}
+      <h2 className="mb-1 mt-8 text-base font-semibold">
+        Métricas — {scopeLabel}
       </h2>
       <p className="mb-4 text-xs text-[var(--muted)]">
-        Respeta el filtro de país/canal de arriba; el mes es la fila de estas
+        Respeta región/país/canal del filtro; el mes es la fila de estas
         tablas, así que el filtro de mes no aplica aquí.
       </p>
       <MonthlyFunnelTable title="LinkedIn Ads" rows={linkedinRows} />
       <MonthlyFunnelTable title="Google Ads" rows={googleRows} />
-      <MonthlyFunnelTable title="Orgánico" rows={organicRows} />
       {(linkedinRows.length > 0 || googleRows.length > 0) && (
         <ChannelTotalsTable
           title="Paid Media Total"
@@ -78,10 +90,18 @@ export function OverviewClient({ initial }: { initial: CampaignRow[] }) {
           ]}
         />
       )}
+      <MonthlyFunnelTable title="Orgánico (demo requests)" rows={organicRows} />
+      {paidRows.length > 0 && organicRows.length > 0 && (
+        <ChannelTotalsTable
+          title={`Total ${scopeLabel}`}
+          channelRows={[
+            { label: "Paid Media", metrics: sumMetrics(paidRows) },
+            { label: "Orgánico", metrics: sumMetrics(organicRows) },
+          ]}
+        />
+      )}
 
-      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-        Tabla dinámica
-      </h2>
+      <h2 className="mb-3 mt-10 text-base font-semibold">Tabla dinámica</h2>
       <PivotTable rows={rows} />
     </>
   );

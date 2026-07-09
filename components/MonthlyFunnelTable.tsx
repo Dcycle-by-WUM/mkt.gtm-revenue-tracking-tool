@@ -49,9 +49,9 @@ function Table({
   rows: { label: string; metrics: ChannelMetrics; emphasize?: boolean }[];
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+    <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
       <table className="w-full text-sm">
-        <thead className="bg-[var(--panel)] text-left text-xs uppercase text-[var(--muted)]">
+        <thead className="bg-[var(--subtle)] text-left text-xs uppercase text-[var(--muted)]">
           <tr>
             <th className="px-3 py-2">{rowLabelHeader}</th>
             {COLUMNS.map((c) => (
@@ -63,7 +63,7 @@ function Table({
           {rows.map((r) => (
             <tr
               key={r.label}
-              className={`border-t border-[var(--border)] ${r.emphasize ? "bg-white/5 font-semibold" : ""}`}
+              className={`border-t border-[var(--border)] ${r.emphasize ? "bg-[var(--subtle)] font-semibold" : ""}`}
             >
               <td className="px-3 py-2 font-mono text-xs">{r.label}</td>
               {COLUMNS.map((c) => (

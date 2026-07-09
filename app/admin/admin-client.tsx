@@ -96,7 +96,7 @@ export function HeatWeightsEditor({ initial }: { initial: HeatWeightsDoc }) {
           {saving ? "Guardando…" : "Activar esta versión"}
         </button>
         <button onClick={reset} className="text-xs text-[var(--muted)] underline">Restablecer defaults §10</button>
-        {savedAt && <span className="text-xs text-emerald-300">Guardado a las {savedAt}</span>}
+        {savedAt && <span className="text-xs text-[var(--good-text)]">Guardado a las {savedAt}</span>}
       </div>
     </Panel>
   );

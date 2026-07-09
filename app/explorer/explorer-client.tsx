@@ -5,18 +5,21 @@ import { Panel } from "@/components/Page";
 import { FilterBar } from "@/components/FilterBar";
 import { PivotTable } from "@/components/PivotTable";
 import {
-  filterCampaigns, countriesOf, monthsOf, emptyFilters, NO_COUNTRY,
+  filterCampaigns, paidCountriesOf, monthsOf, emptyFilters, NO_COUNTRY,
   applyOverrides, type CampaignRow, type CountryOverrides,
 } from "@/lib/mock-data";
+import type { CountryGroups } from "@/lib/regions";
 import { actionSetCountryOverride, actionClearCountryOverride } from "@/app/actions";
 
 const COUNTRY_OPTIONS = [NO_COUNTRY, "ES", "UK", "DE", "FR", "US", "MX", "IT"];
 
 export function ExplorerClient({
   campaigns: initialCampaigns,
+  groups,
   overrides: initialOverrides,
 }: {
   campaigns: CampaignRow[];
+  groups: CountryGroups;
   overrides: CountryOverrides;
 }) {
   const [overrides, setOverrides] = useState(initialOverrides);
@@ -24,7 +27,7 @@ export function ExplorerClient({
   const [, startTransition] = useTransition();
 
   const all = applyOverrides(initialCampaigns, overrides);
-  const rows = filterCampaigns(all, filters);
+  const rows = filterCampaigns(all, filters, groups);
   const noCountry = [...new Map(all.filter((r) => r.country === NO_COUNTRY).map((r) => [r.campaign, r])).values()];
 
   const setCountry = (campaign: string, country: string) => {
@@ -54,9 +57,10 @@ export function ExplorerClient({
       <FilterBar
         filters={filters}
         setFilters={setFilters}
-        countries={countriesOf(all)}
+        countries={paidCountriesOf(all)}
         months={monthsOf(all)}
         channels={[...new Set(all.map((r) => r.channel))].sort()}
+        groups={groups}
       />
       <PivotTable rows={rows} initialDims={["country"]} />
 

@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 
 // Data Health — PRD §9 (12). Estado de las fuentes + colas de calidad.
 const BADGE: Record<string, string> = {
-  ok: "bg-emerald-500/15 text-emerald-300",
-  pending: "bg-amber-500/15 text-amber-300",
-  blocked: "bg-red-500/15 text-red-300",
+  ok: "bg-[var(--good-bg)] text-[var(--good-text)]",
+  pending: "bg-[var(--warn-bg)] text-[var(--warn-text)]",
+  blocked: "bg-red-50 text-red-700",
 };
 const LABEL: Record<string, string> = {
   ok: "OK",
@@ -42,9 +42,9 @@ export default async function DataHealthPage() {
       />
 
       <Panel title="Fuentes">
-        <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
           <table className="w-full text-sm">
-            <thead className="bg-[var(--panel)] text-left text-xs uppercase text-[var(--muted)]">
+            <thead className="bg-[var(--subtle)] text-left text-xs uppercase text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-3">Fuente</th>
                 <th className="px-4 py-3">Método</th>
