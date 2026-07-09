@@ -34,7 +34,7 @@ export function PivotTable({
               key={d}
               onClick={() => toggle(d)}
               className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
-                active ? "bg-[var(--accent)]/20 text-[var(--accent)]" : "bg-white/5 hover:bg-white/10"
+                active ? "bg-[var(--accent)]/20 text-[var(--accent)]" : "bg-[var(--subtle)] hover:bg-[var(--subtle-hover)]"
               }`}
             >
               {active && (
@@ -53,9 +53,9 @@ export function PivotTable({
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--panel)] text-left text-xs uppercase text-[var(--muted)]">
+          <thead className="bg-[var(--subtle)] text-left text-xs uppercase text-[var(--muted)]">
             <tr>
               {selected.length === 0 && <th className="px-4 py-3">Total</th>}
               {selected.map((d) => (

@@ -15,13 +15,13 @@ export default function LoginPage() {
 
         <button
           disabled
-          className="mb-4 w-full rounded-md border border-[var(--border)] bg-white/5 px-4 py-2 text-sm text-[var(--muted)] cursor-not-allowed"
+          className="mb-4 w-full rounded-md border border-[var(--border)] bg-[var(--subtle)] px-4 py-2 text-sm text-[var(--muted)] cursor-not-allowed"
           title="Pendiente de credenciales OAuth"
         >
           <span className="mr-2">🔒</span> Entrar con Google (próximamente)
         </button>
 
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+        <div className="rounded-md border border-[var(--warn-border)] bg-[var(--warn-bg)] p-3 text-xs text-[var(--warn-text)]">
           Mientras tanto el acceso es <strong>abierto full-admin</strong> para que el
           equipo pueda revisar la app. Cuando se active el SSO, los roles
           (admin/marketing/sdr/solo-lectura) se aplican vía RLS de Supabase.

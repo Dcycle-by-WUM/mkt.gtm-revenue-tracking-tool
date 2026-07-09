@@ -318,7 +318,7 @@ export function LinkedInCsvUploader() {
           <div className="mt-3 flex gap-2">
             <button
               onClick={() => confirmReview(phase.pending)}
-              className="rounded border border-[var(--border)] px-3 py-1 text-xs hover:bg-white/5"
+              className="rounded border border-[var(--border)] px-3 py-1 text-xs hover:bg-[var(--subtle)]"
             >
               Confirmar y subir
             </button>
@@ -336,7 +336,7 @@ export function LinkedInCsvUploader() {
         <div className="mt-4 border-t border-[var(--border)] pt-3 text-sm">
           {phase.ok ? (
             <>
-              <div className="text-emerald-300">
+              <div className="text-[var(--good-text)]">
                 ✓ {phase.summary.campaigns > 0 && <>{phase.summary.campaigns} campañas · </>}
                 {phase.summary.spendRows} filas campaña×día actualizadas
                 {phase.summary.totalSpend > 0 && <> · {fmtEur(phase.summary.totalSpend)} spend total</>}
@@ -357,7 +357,7 @@ export function LinkedInCsvUploader() {
                 </div>
               )}
               {phase.summary.viewsRefreshed === false && (
-                <div className="mt-2 text-amber-300">
+                <div className="mt-2 text-[var(--warn-text)]">
                   ⚠ Los datos se guardaron, pero el refresh de las vistas falló:
                   el dashboard puede seguir mostrando cifras antiguas. Vuelve a
                   subir el archivo para reintentar el refresh.
@@ -377,7 +377,7 @@ export function LinkedInCsvUploader() {
               )}
             </>
           ) : (
-            <div className="text-amber-300">✗ Error: {phase.error}</div>
+            <div className="text-[var(--warn-text)]">✗ Error: {phase.error}</div>
           )}
         </div>
       )}

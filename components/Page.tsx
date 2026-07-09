@@ -10,7 +10,7 @@ export function PageHeader({
   return (
     <div className="mb-6">
       {phase && (
-        <span className="mb-2 inline-block rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-wide text-[var(--muted)]">
+        <span className="mb-2 inline-block rounded bg-[var(--subtle)] px-2 py-1 text-[10px] uppercase tracking-wide text-[var(--muted)]">
           Preview · Roadmap {phase}
         </span>
       )}
@@ -25,7 +25,7 @@ export function PageHeader({
 // de que no está activa.
 export function OnHoldBanner({ area }: { area: string }) {
   return (
-    <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+    <div className="mb-6 rounded-lg border border-[var(--warn-border)] bg-[var(--warn-bg)] px-4 py-3 text-sm text-[var(--warn-text)]">
       <strong className="uppercase tracking-wide">On hold</strong> · {area} está en pausa
       por decisión de negocio. La pantalla y el modelo de datos siguen
       funcionando para futuras iteraciones, pero el equipo no está priorizando
@@ -42,7 +42,7 @@ export function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-5">
+    <div className="card p-5">
       {title && (
         <div className="mb-3 text-xs uppercase tracking-wide text-[var(--muted)]">
           {title}

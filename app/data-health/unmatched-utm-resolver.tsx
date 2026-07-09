@@ -14,9 +14,13 @@ export function UnmatchedUtmResolver({
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  const [campaignSearch, setCampaignSearch] = useState("");
   const [, startTransition] = useTransition();
 
   const pending = utms.filter((u) => !resolved.has(u));
+  const visibleCampaigns = campaignSearch.trim()
+    ? campaigns.filter((c) => c.name.toLowerCase().includes(campaignSearch.trim().toLowerCase()))
+    : campaigns;
 
   const save = (utm: string) => {
     const campaignId = selection[utm];
@@ -34,6 +38,13 @@ export function UnmatchedUtmResolver({
   }
 
   return (
+    <div>
+      <input
+        className="control mb-3 w-full"
+        placeholder={`Filtrar las ${campaigns.length} campañas del selector…`}
+        value={campaignSearch}
+        onChange={(e) => setCampaignSearch(e.target.value)}
+      />
     <ul className="space-y-2">
       {pending.map((u) => (
         <li key={u} className="border-b border-[var(--border)] pb-2 last:border-0">
@@ -45,7 +56,7 @@ export function UnmatchedUtmResolver({
               onChange={(e) => setSelection((s) => ({ ...s, [u]: e.target.value }))}
             >
               <option value="">Asignar a campaña…</option>
-              {campaigns.map((c) => (
+              {visibleCampaigns.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.source} · {c.name} {c.country ? `(${c.country})` : ""}
                 </option>
@@ -62,5 +73,6 @@ export function UnmatchedUtmResolver({
         </li>
       ))}
     </ul>
+    </div>
   );
 }

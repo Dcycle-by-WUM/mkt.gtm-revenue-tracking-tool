@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { FilterBar } from "@/components/FilterBar";
 import { emptyFilters } from "@/lib/mock-data";
+import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur } from "@/lib/kpis";
 import { leadCohort, type DealRow, type LeadCohort } from "@/lib/data/deals";
 
 const COHORT_BADGE: Record<LeadCohort, string> = {
-  "2026": "bg-emerald-500/15 text-emerald-300",
-  "histórico": "bg-sky-500/15 text-sky-300",
-  "sin contacto": "bg-white/10 text-[var(--muted)]",
+  "2026": "bg-[var(--good-bg)] text-[var(--good-text)]",
+  "histórico": "bg-[var(--info-bg)] text-[var(--info-text)]",
+  "sin contacto": "bg-[var(--subtle)] text-[var(--muted)]",
 };
 
 const COHORT_LABEL: Record<LeadCohort, string> = {
@@ -18,30 +19,25 @@ const COHORT_LABEL: Record<LeadCohort, string> = {
   "sin contacto": "Sin contacto",
 };
 
-export function DealsClient({ initial }: { initial: DealRow[] }) {
+export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: CountryGroups }) {
   const [filters, setFilters] = useState(emptyFilters);
   const [cohortFilter, setCohortFilter] = useState<"" | LeadCohort>("");
 
-  const rows = initial.filter(
-    (r) =>
-      (!filters.country || r.country === filters.country) &&
-      (!filters.month || r.month === filters.month) &&
-      (!filters.channel || r.channel === filters.channel) &&
-      (!cohortFilter || leadCohort(r) === cohortFilter),
-  );
+  const matchesBase = (r: DealRow) =>
+    (!filters.region || regionOf(r.country, groups) === filters.region) &&
+    (!filters.country || r.country === filters.country) &&
+    (!filters.month || r.month === filters.month) &&
+    (!filters.channel || r.channel === filters.channel);
+
+  const rows = initial.filter((r) => matchesBase(r) && (!cohortFilter || leadCohort(r) === cohortFilter));
 
   const countries = [...new Set(initial.map((r) => r.country))].sort();
   const months = [...new Set(initial.map((r) => r.month))].sort();
   const channels = [...new Set(initial.map((r) => r.channel))].sort();
 
-  // Tiles de cohorte: respetan país/mes/canal pero ignoran el filtro de
-  // cohorte (son precisamente el desglose por cohorte).
-  const tileRows = initial.filter(
-    (r) =>
-      (!filters.country || r.country === filters.country) &&
-      (!filters.month || r.month === filters.month) &&
-      (!filters.channel || r.channel === filters.channel),
-  );
+  // Tiles de cohorte: respetan región/país/mes/canal pero ignoran el filtro
+  // de cohorte (son precisamente el desglose por cohorte).
+  const tileRows = initial.filter(matchesBase);
   const byCohort = (c: LeadCohort) => tileRows.filter((r) => leadCohort(r) === c);
   const sumAmount = (rs: DealRow[]) => rs.reduce((a, r) => a + r.amount, 0);
 
@@ -62,6 +58,7 @@ export function DealsClient({ initial }: { initial: DealRow[] }) {
         countries={countries}
         months={months}
         channels={channels}
+        groups={groups}
       />
 
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -72,7 +69,7 @@ export function DealsClient({ initial }: { initial: DealRow[] }) {
             className={`rounded-lg border p-5 text-left transition ${
               t.cohort && cohortFilter === t.cohort
                 ? "border-[var(--accent)] bg-[var(--panel)]"
-                : "border-[var(--border)] bg-[var(--panel)] hover:bg-white/5"
+                : "border-[var(--border)] bg-[var(--panel)] hover:bg-[var(--subtle)]"
             }`}
           >
             <div className="text-xs uppercase tracking-wide text-[var(--muted)]">{t.label}</div>
@@ -92,9 +89,9 @@ export function DealsClient({ initial }: { initial: DealRow[] }) {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--panel)] text-left text-xs uppercase text-[var(--muted)]">
+          <thead className="bg-[var(--subtle)] text-left text-xs uppercase text-[var(--muted)]">
             <tr>
               <th className="px-4 py-3">Deal</th>
               <th className="px-4 py-3">Mes</th>
@@ -115,7 +112,7 @@ export function DealsClient({ initial }: { initial: DealRow[] }) {
                   <td className="px-4 py-2.5">
                     {r.dealname}
                     {r.isClosedWon && (
-                      <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">
+                      <span className="ml-2 rounded bg-[var(--good-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--good-text)]">
                         Won
                       </span>
                     )}

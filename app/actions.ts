@@ -12,6 +12,7 @@ import { setCampaignTagsByName } from "@/lib/data/campaign-tags";
 import { updateAccountAbm } from "@/lib/data/accounts";
 import { setActiveHeatWeights, type HeatWeightsDoc } from "@/lib/data/heat-weights";
 import { upsertCampaignAlias, deleteCampaignAlias } from "@/lib/data/campaign-aliases";
+import { upsertCountryGroup } from "@/lib/data/regions";
 import type { ForecastRow } from "@/lib/mock-data";
 
 export async function actionSetCountryOverride(pattern: string, country: string): Promise<void> {
@@ -76,4 +77,13 @@ export async function actionDeleteCampaignAlias(normKey: string): Promise<void> 
   revalidatePath("/");
   revalidatePath("/paid");
   revalidatePath("/explorer");
+}
+
+export async function actionSetCountryGroup(country: string, groupName: string): Promise<void> {
+  await upsertCountryGroup(country, groupName);
+  revalidatePath("/");
+  revalidatePath("/paid");
+  revalidatePath("/explorer");
+  revalidatePath("/deals");
+  revalidatePath("/admin");
 }

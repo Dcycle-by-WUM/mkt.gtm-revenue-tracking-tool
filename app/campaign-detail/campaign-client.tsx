@@ -33,6 +33,10 @@ export function CampaignDetailClient({
   const agg = aggregateByCampaign(campaigns);
   const [tags, setTags] = useState(initialTags);
   const [selected, setSelected] = useState(agg[0]?.campaign ?? "");
+  const [campaignSearch, setCampaignSearch] = useState("");
+  const filteredAgg = campaignSearch.trim()
+    ? agg.filter((x) => x.campaign.toLowerCase().includes(campaignSearch.trim().toLowerCase()))
+    : agg;
   const [, startTransition] = useTransition();
   const c = agg.find((x) => x.campaign === selected) ?? agg[0];
 
@@ -63,15 +67,22 @@ export function CampaignDetailClient({
 
   return (
     <>
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <span className="text-sm text-[var(--muted)]">Campaña:</span>
+        <input
+          className="control w-64"
+          placeholder="Buscar campaña…"
+          value={campaignSearch}
+          onChange={(e) => setCampaignSearch(e.target.value)}
+        />
         <select
-          className="rounded-md border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 text-sm"
+          className="control max-w-xl"
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
         >
-          {agg.map((x) => <option key={x.campaign}>{x.campaign}</option>)}
+          {filteredAgg.map((x) => <option key={x.campaign}>{x.campaign}</option>)}
         </select>
+        <span className="text-xs text-[var(--muted)]">{filteredAgg.length} campañas</span>
       </div>
 
       {c && (
@@ -91,7 +102,7 @@ export function CampaignDetailClient({
               {funnel.map((f) => (
                 <div key={f.stage} className="flex items-center gap-3">
                   <div className="w-24 text-sm text-[var(--muted)]">{f.stage}</div>
-                  <div className="h-6 flex-1 rounded bg-white/5">
+                  <div className="h-6 flex-1 rounded bg-[var(--subtle)]">
                     <div className="h-6 rounded bg-[var(--accent)]/60" style={{ width: `${Math.max((f.money ? f.value / Math.max(c.pipeline, 1) : f.value / Math.max(c.leads, 1)) * 100, 4)}%` }} />
                   </div>
                   <div className="w-24 text-right text-sm tabular-nums">{f.money ? fmtEur(f.value) : fmtNum(f.value)}</div>

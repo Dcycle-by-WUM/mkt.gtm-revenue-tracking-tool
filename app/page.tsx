@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/Page";
 import { StatusBanner } from "@/components/StatusBanner";
 import { listCampaigns } from "@/lib/data/campaigns";
+import { listCountryGroups } from "@/lib/data/regions";
 import { OverviewClient } from "./overview-client";
 
 // Renderizar en runtime: si fuera estático, los flags de `integrations` se
@@ -11,15 +12,15 @@ export const dynamic = "force-dynamic";
 // Overview "Cómo vamos" — PRD §9 (2). Server Component que delega los datos
 // (Supabase si vivo, mock si no) y los pasa al Client interactivo.
 export default async function OverviewPage() {
-  const initial = await listCampaigns();
+  const [initial, groups] = await Promise.all([listCampaigns(), listCountryGroups()]);
   return (
     <div>
       <PageHeader
         title="Overview — Cómo vamos"
-        subtitle="Funnel paid unificado. Filtra por país/mes y monta tablas dinámicas que se recalculan solas."
+        subtitle="Funnel unificado paid + orgánico. Filtra por región/país/mes y baja al detalle con la tabla dinámica."
       />
       <StatusBanner />
-      <OverviewClient initial={initial} />
+      <OverviewClient initial={initial} groups={groups} />
     </div>
   );
 }

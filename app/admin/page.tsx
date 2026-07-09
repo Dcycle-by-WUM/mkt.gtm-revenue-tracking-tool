@@ -2,7 +2,9 @@ import { PageHeader, Panel } from "@/components/Page";
 import { integrations } from "@/lib/config";
 import { getActiveHeatWeights } from "@/lib/data/heat-weights";
 import { listTargets } from "@/lib/data/targets";
+import { listCountryGroups } from "@/lib/data/regions";
 import { HeatWeightsEditor } from "./admin-client";
+import { RegionGroupsEditor } from "./regions-client";
 import { LinkedInCsvUploader } from "./linkedin-upload-client";
 import { fmtEur } from "@/lib/kpis";
 
@@ -16,7 +18,7 @@ function Conn({ label, ok, detail }: { label: string; ok: boolean; detail: strin
         <div>{label}</div>
         <div className="text-xs text-[var(--muted)]">{detail}</div>
       </div>
-      <span className={ok ? "text-emerald-300" : "text-amber-300"}>
+      <span className={ok ? "text-[var(--good-text)]" : "text-[var(--warn-text)]"}>
         {ok ? "Conectado" : "Pendiente"}
       </span>
     </div>
@@ -24,9 +26,10 @@ function Conn({ label, ok, detail }: { label: string; ok: boolean; detail: strin
 }
 
 export default async function AdminPage() {
-  const [weights, targets] = await Promise.all([
+  const [weights, targets, countryGroups] = await Promise.all([
     getActiveHeatWeights(),
     listTargets(),
+    listCountryGroups(),
   ]);
 
   return (
@@ -136,6 +139,10 @@ export default async function AdminPage() {
             </ul>
           )}
           <p className="mt-2 text-xs text-[var(--muted)]">Edítalos en <a href="/forecast" className="text-[var(--accent)] underline">Pipeline & Forecast</a>.</p>
+        </Panel>
+
+        <Panel title="Regiones (grupos de países)">
+          <RegionGroupsEditor initial={countryGroups} />
         </Panel>
       </div>
 

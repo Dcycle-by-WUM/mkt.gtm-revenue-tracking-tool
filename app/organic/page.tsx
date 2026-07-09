@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 // Orgánico (SEO) + AEO — PRD §11.
 function KpiTable({ rows }: { rows: OrganicKpi[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+    <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
       <table className="w-full text-sm">
-        <thead className="bg-[var(--panel)] text-left text-xs uppercase text-[var(--muted)]">
+        <thead className="bg-[var(--subtle)] text-left text-xs uppercase text-[var(--muted)]">
           <tr>
             <th className="px-4 py-3">KPI</th>
             <th className="px-4 py-3">Valor</th>
@@ -42,7 +42,7 @@ export default async function OrganicPage() {
         subtitle="SEO non-branded, Domain Authority, keywords en Top 3, y AEO (AI Visibility / Share of Voice), conectados hasta pipeline € y deals."
       />
       <StatusBanner />
-      <p className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+      <p className="mb-4 rounded border border-[var(--warn-border)] bg-[var(--warn-bg)] px-3 py-2 text-xs text-[var(--warn-text)]">
         Fuentes externas (DA: Moz/Ahrefs/Semrush · AI-visibility: Profound/Peec/Otterly/Semrush AI) están "on hold"
         en <code>docs/DECISIONES.md</code>. El modelo y las pantallas ya están en su sitio: se enchufan en cuanto
         se decida la herramienta.

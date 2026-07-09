@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { FilterBar } from "@/components/FilterBar";
 import {
-  filterCampaigns, countriesOf, monthsOf, sumMetrics, emptyMetrics,
+  filterCampaigns, paidCountriesOf, monthsOf, sumMetrics, emptyMetrics,
   emptyFilters, type CampaignRow,
 } from "@/lib/mock-data";
+import type { CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtNum, fmtPct, ctr, cpc, cpm, cpl, cpmql, cpsql, roi, type ChannelMetrics } from "@/lib/kpis";
 import { actionUpsertNote } from "@/app/actions";
 
@@ -45,16 +46,22 @@ const cols: { label: string; fn: (r: ChannelMetrics) => string }[] = [
 
 export function PaidClient({
   initial,
+  groups,
   notes: initialNotes,
 }: {
   initial: CampaignRow[];
+  groups: CountryGroups;
   notes: Record<string, string>;
 }) {
   const [notes, setNotes] = useState(initialNotes);
   const [, startTransition] = useTransition();
   const [filters, setFilters] = useState(emptyFilters);
+  const [search, setSearch] = useState("");
 
-  const rows = aggregateByCampaign(filterCampaigns(initial, filters));
+  const allRows = aggregateByCampaign(filterCampaigns(initial, filters, groups));
+  const rows = search.trim()
+    ? allRows.filter((r) => r.campaign.toLowerCase().includes(search.trim().toLowerCase()))
+    : allRows;
   const t = sumMetrics(rows);
 
   const updateNote = (campaign: string, body: string) => {
@@ -69,14 +76,27 @@ export function PaidClient({
       <FilterBar
         filters={filters}
         setFilters={setFilters}
-        countries={countriesOf(initial)}
+        countries={paidCountriesOf(initial)}
         months={monthsOf(initial)}
         channels={[...new Set(initial.map((r) => r.channel))].sort()}
+        groups={groups}
       />
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+      <div className="mb-4 flex items-center gap-3">
+        <input
+          className="control w-72"
+          placeholder="Buscar campaña…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <span className="text-xs text-[var(--muted)]">
+          {rows.length} de {allRows.length} campañas
+        </span>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--panel)] text-left text-xs uppercase text-[var(--muted)]">
+          <thead className="bg-[var(--subtle)] text-left text-xs uppercase text-[var(--muted)]">
             <tr>
               <th className="px-3 py-3">Canal</th>
               <th className="px-3 py-3">Campaña</th>
@@ -110,7 +130,7 @@ export function PaidClient({
               <tr><td colSpan={cols.length + 4} className="px-4 py-6 text-center text-[var(--muted)]">Sin datos para los filtros.</td></tr>
             )}
           </tbody>
-          <tfoot className="border-t-2 border-[var(--border)] bg-[var(--panel)] font-semibold">
+          <tfoot className="border-t-2 border-[var(--border)] bg-[var(--subtle)] font-semibold">
             <tr>
               <td className="px-3 py-3" colSpan={3}>Total</td>
               {cols.map((c) => (

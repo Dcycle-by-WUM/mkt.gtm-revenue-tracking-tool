@@ -32,7 +32,7 @@ export default async function AbmHeatPage() {
               </div>
               <div className="flex items-center gap-3">
                 {!eligible && (
-                  <span className="rounded bg-white/10 px-2 py-1 text-xs text-[var(--muted)]">
+                  <span className="rounded bg-[var(--subtle)] px-2 py-1 text-xs text-[var(--muted)]">
                     no elegible
                   </span>
                 )}
@@ -47,7 +47,7 @@ export default async function AbmHeatPage() {
                 {heat.breakdown.map((b) => (
                   <span
                     key={b.signal}
-                    className="rounded bg-white/5 px-2 py-1 text-xs text-[var(--muted)]"
+                    className="rounded bg-[var(--subtle)] px-2 py-1 text-xs text-[var(--muted)]"
                   >
                     {b.signal}: <span className="text-[var(--text)]">+{b.points}</span>
                   </span>

@@ -4,6 +4,7 @@
 
 import type { ChannelMetrics } from "./kpis";
 import type { HeatContact } from "./heat";
+import { regionOf, type CountryGroups } from "./regions";
 
 export const IS_MOCK = true;
 
@@ -75,13 +76,21 @@ export function sumMetrics<T extends ChannelMetrics>(rows: T[]): ChannelMetrics 
 /** Compat: usado por pantallas que sumaban filas. */
 export const totals = sumMetrics;
 
-// ── Filtros (país / mes / canal) ───────────────────────────────
-export type Filters = { country: string; month: string; channel: string };
-export const emptyFilters: Filters = { country: "", month: "", channel: "" };
+// ── Filtros (región / país / mes / canal) ─────────────────────
+// `region` se resuelve contra el mapa país→grupo (lib/regions.ts) cuando el
+// filtro recibe `groups`; sin mapa se ignora, así las pantallas que aún no
+// pasan regiones siguen funcionando igual.
+export type Filters = { country: string; month: string; channel: string; region: string };
+export const emptyFilters: Filters = { country: "", month: "", channel: "", region: "" };
 
-export function filterCampaigns(rows: CampaignRow[], f: Filters): CampaignRow[] {
+export function filterCampaigns(
+  rows: CampaignRow[],
+  f: Filters,
+  groups?: CountryGroups,
+): CampaignRow[] {
   return rows.filter(
     (r) =>
+      (!f.region || !groups || regionOf(r.country, groups) === f.region) &&
       (!f.country || r.country === f.country) &&
       (!f.month || r.month === f.month) &&
       (!f.channel || r.channel === f.channel),
@@ -89,6 +98,12 @@ export function filterCampaigns(rows: CampaignRow[], f: Filters): CampaignRow[] 
 }
 
 export const countriesOf = (rows: CampaignRow[]) => [...new Set(rows.map((r) => r.country))].sort();
+
+// Solo países con actividad paid (campaña o atribución LinkedIn/Google): el
+// dropdown de país no debe listar todos los orígenes de leads orgánicos del
+// mundo — a esos se llega por región.
+export const paidCountriesOf = (rows: CampaignRow[]) =>
+  [...new Set(rows.filter((r) => r.channel !== "Otros").map((r) => r.country))].sort();
 
 // ── Overrides de país (PRD §8.2) ──────────────────────────────
 // Mapa { campaña (o patrón) → país }. Se aplica encima de los datos vengan
