@@ -68,6 +68,7 @@ export type DbContact = {
   hubspot_owner_id: string | null;
   lifecyclestage: string | null;
   lead_status: string | null;
+  lead_source: string | null;
   analytics_source: string | null;
   utm_campaign_raw: string | null;
   utm_campaign_norm: string | null;
@@ -108,6 +109,7 @@ export type DbDeal = {
   amount_in_home_currency: number | null;
   dealstage: string | null;
   pipeline: string | null;
+  analytics_source: string | null;
   hubspot_contact_id: string | null;
   hubspot_company_id: string | null;
   createdate: string | null;

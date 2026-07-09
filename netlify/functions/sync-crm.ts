@@ -7,6 +7,7 @@ import {
   fetchCompanies,
   fetchContacts,
   fetchDeals,
+  fetchDealLinkedContacts,
   fetchEngagements,
 } from "@/lib/hubspot";
 import { requireSupabaseAdmin } from "@/lib/supabase/admin";
@@ -102,12 +103,33 @@ export default async (): Promise<Response> => {
     "contacts",
     "hubspot_contact_id",
   );
+  // Deals + contactos asociados en el mismo paso: `runStep` descarta las
+  // filas tras el upsert, y necesitamos los `hubspot_contact_id` de los
+  // deals recién traídos para completar su atribución (ver migración 0013).
+  let dealRows: Awaited<ReturnType<typeof fetchDeals>> = [];
   const deals = await runStep(
     "deals",
-    fetchDeals as () => Promise<Record<string, unknown>[]>,
+    async () => {
+      dealRows = await fetchDeals();
+      return dealRows as unknown as Record<string, unknown>[];
+    },
     "deals",
     "hubspot_deal_id",
   );
+  // Contactos asociados a esos deals (champion / primer contacto de la
+  // asociación) que `fetchContacts` no trae por ser anteriores a
+  // HUBSPOT_BACKFILL_FROM o no ser Inbound — sin esto, un deal de una
+  // cuenta ya existente no se puede atribuir a ningún canal/campaña
+  // (ver migración 0013). Upsert idempotente sobre la misma tabla
+  // `contacts`; si ya estaban, no cambia nada más que refrescarlos.
+  const dealsLinkedContacts = !deals.error
+    ? await runStep(
+        "deals_linked_contacts",
+        () => fetchDealLinkedContacts(dealRows) as unknown as Promise<Record<string, unknown>[]>,
+        "contacts",
+        "hubspot_contact_id",
+      )
+    : { fetched: 0, upserted: 0 };
   const engagements = await runStep(
     "engagements",
     fetchEngagements as () => Promise<Record<string, unknown>[]>,
@@ -115,17 +137,19 @@ export default async (): Promise<Response> => {
     "hubspot_engagement_id",
   );
 
-  const breakdown = { companies, contacts, deals, engagements };
+  const breakdown = { companies, contacts, deals, dealsLinkedContacts, engagements };
   const total =
-    companies.upserted + contacts.upserted + deals.upserted + engagements.upserted;
-  const errors = [companies, contacts, deals, engagements]
+    companies.upserted + contacts.upserted + deals.upserted +
+    dealsLinkedContacts.upserted + engagements.upserted;
+  const errors = [companies, contacts, deals, dealsLinkedContacts, engagements]
     .map((s) => s.error)
     .filter(Boolean) as string[];
 
   const ok = errors.length === 0;
 
-  // Solo refrescar vistas si contacts y deals se sincronizaron sin errores.
-  if (!contacts.error && !deals.error) {
+  // Solo refrescar vistas si contacts y deals (incl. sus contactos
+  // enlazados) se sincronizaron sin errores.
+  if (!contacts.error && !deals.error && !dealsLinkedContacts.error) {
     try {
       const sb = requireSupabaseAdmin();
       await sb.rpc("refresh_kpi_views");

@@ -27,7 +27,7 @@ function requireToken(): string {
 
 const PROPS_CONTACT = [
   "email", "firstname", "lastname", "company", "jobtitle",
-  "hubspot_owner_id", "lifecyclestage", "hs_lead_status",
+  "hubspot_owner_id", "lifecyclestage", "hs_lead_status", "lead_source",
   "hs_analytics_source", "utm_campaign", "country",
   "num_conversion_events", "recent_conversion_date",
   "recent_conversion_event_name", "first_conversion_event_name",
@@ -38,7 +38,7 @@ const PROPS_CONTACT = [
 
 const PROPS_DEAL = [
   "amount", "amount_in_home_currency", "dealstage", "pipeline",
-  "createdate", "closedate",
+  "hs_analytics_source", "createdate", "closedate",
 ] as const;
 
 const PROPS_COMPANY = [
@@ -56,6 +56,7 @@ export type HsContact = {
   hubspot_owner_id: string | null;
   lifecyclestage: string | null;
   lead_status: string | null;
+  lead_source: string | null;
   analytics_source: string | null;
   utm_campaign_raw: string | null;
   utm_campaign_norm: string | null;
@@ -193,6 +194,7 @@ function mapContact(r: HsRecord): HsContact {
     hubspot_owner_id: p.hubspot_owner_id,
     lifecyclestage: p.lifecyclestage,
     lead_status: p.hs_lead_status,
+    lead_source: p.lead_source,
     analytics_source: p.hs_analytics_source,
     utm_campaign_raw: utmRaw,
     utm_campaign_norm: utmRaw ? normalizeUtm(utmRaw) : null,
@@ -230,11 +232,37 @@ export async function fetchContacts(): Promise<HsContact[]> {
   }
 
   const records = await searchAll<HsRecord>("contacts", {
-    properties: [...PROPS_CONTACT, "lead_source"],
+    properties: [...PROPS_CONTACT],
     filterGroups: [{ filters }],
     sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
   });
   return records.map(mapContact);
+}
+
+// Batch-read por ID, sin filtro de fecha ni de lead_source — para no perder
+// la atribución de canal/campaña de un deal cuyo contacto asociado (el
+// champion, o el primer contacto en la asociación) es más antiguo que
+// HUBSPOT_BACKFILL_FROM o no es Inbound. Se usa solo para completar la
+// atribución del deal (lib/hubspot.ts:fetchDeals); `contacts.lead_source`
+// deja constancia de que no es necesariamente Inbound para que el leg de
+// Leads/MQL (kpi_by_campaign_month / kpi_organic_by_month) no los cuente.
+async function batchReadContacts(ids: string[]): Promise<HsContact[]> {
+  if (ids.length === 0) return [];
+  const token = requireToken();
+  const all: HsRecord[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    const page = await hsRetry<{ results: HsRecord[] }>(
+      () => fetch(`${HUBSPOT_BASE}/crm/v3/objects/contacts/batch/read`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ properties: [...PROPS_CONTACT], inputs: batch.map((id) => ({ id })) }),
+      }),
+      "batch/read contacts",
+    );
+    all.push(...page.results);
+  }
+  return all.map(mapContact);
 }
 
 export type HsDeal = {
@@ -243,6 +271,7 @@ export type HsDeal = {
   amount_in_home_currency: number | null;
   dealstage: string | null;
   pipeline: string | null;
+  analytics_source: string | null;
   hubspot_contact_id: string | null;
   hubspot_company_id: string | null;
   createdate: string | null;
@@ -324,12 +353,24 @@ export async function fetchDeals(): Promise<HsDeal[]> {
         : null,
       dealstage: p.dealstage,
       pipeline: p.pipeline,
+      analytics_source: p.hs_analytics_source,
       hubspot_contact_id: contactMap.get(r.id) ?? null,
       hubspot_company_id: companyMap.get(r.id) ?? null,
       createdate: p.createdate,
       closedate: p.closedate,
     };
   });
+}
+
+// Contactos asociados a deals ya sincronizados (por `hubspot_contact_id`),
+// traídos SIN el filtro de fecha/lead_source de `fetchContacts` — para no
+// perder la atribución de canal/campaña de un deal cuyo contacto (el
+// champion, o el primer contacto en la asociación) es una cuenta ya
+// existente más antigua que HUBSPOT_BACKFILL_FROM. Idempotente: hace
+// upsert sobre las mismas filas que `fetchContacts` si ya estaban.
+export async function fetchDealLinkedContacts(deals: HsDeal[]): Promise<HsContact[]> {
+  const ids = [...new Set(deals.map((d) => d.hubspot_contact_id).filter((id): id is string => !!id))];
+  return batchReadContacts(ids);
 }
 
 export type HsCompany = {
