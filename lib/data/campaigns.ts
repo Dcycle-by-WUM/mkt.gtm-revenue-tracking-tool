@@ -13,13 +13,15 @@ import {
 } from "@/lib/mock-data";
 import type { DbKpiByCampaignMonth, DbKpiOrganicByMonth } from "@/lib/supabase/types";
 import { listCountryOverrides } from "@/lib/data/overrides";
+import { listCountryGroups } from "@/lib/data/regions";
+import { normalizeCountryLabel, collapseCountry } from "@/lib/regions";
 
 function fromDbRow(r: DbKpiByCampaignMonth): CampaignRow {
   return {
     channel: r.channel,
     campaign: r.campaign,
     campaignGroup: null,                     // no entra en la vista agregada
-    country: r.country,
+    country: normalizeCountryLabel(r.country),
     month: r.month,
     spend: Number(r.spend) || 0,
     impressions: Number(r.impressions) || 0,
@@ -40,7 +42,7 @@ function fromOrganicDbRow(r: DbKpiOrganicByMonth): CampaignRow {
     channel: "Otros",
     campaign: "(orgánico)",
     campaignGroup: null,
-    country: r.country,
+    country: normalizeCountryLabel(r.country),
     month: r.month,
     spend: 0,
     impressions: Number(r.impressions) || 0,
@@ -105,7 +107,7 @@ async function listCRMOnlyMonthly(sb: SupabaseClient): Promise<CampaignRow[]> {
     if (!c.created_at_hs) continue;
     const month = c.created_at_hs.slice(0, 7);
     const channel = sourceToChannel(c.analytics_source);
-    const country = c.country_parsed || c.country_raw || "Sin país / Multi";
+    const country = normalizeCountryLabel(c.country_parsed || c.country_raw || "Sin país / Multi");
     const key = `${channel}|${month}|${country}`;
     const b = buckets.get(key) ?? {
       channel: channel as Channel,
@@ -177,13 +179,34 @@ export async function listCampaigns(): Promise<CampaignRow[]> {
     : [];
 
   if (paidRows.length > 0 || organicRows.length > 0) {
-    return [...paidRows, ...organicRows];
+    return collapseNonPaidCountries([...paidRows, ...organicRows]);
   }
 
   // Ni paid ni orgánico (ningún sync ha corrido todavía) → derivar del CRM
   // crudo para que la pantalla muestre algo mientras tanto.
   const crmOnly = await listCRMOnlyMonthly(sb);
-  return crmOnly;
+  return collapseNonPaidCountries(crmOnly);
+}
+
+// La cola larga de países que solo aportan leads orgánicos sueltos (India,
+// Estonia, Brasil… sin campaña paid NI pipeline) no merece fila propia en
+// pivots y listados: se colapsa en un bucket por región ("Otros · Rest of
+// International"). Un país SÍ conserva su fila si tiene actividad paid o
+// dinero atribuido (SQL/pipeline) — eso es señal, no ruido. El filtro de
+// región sigue encontrando las filas colapsadas (regionOf entiende el
+// prefijo). Decisión Davide, 10-jul.
+async function collapseNonPaidCountries(rows: CampaignRow[]): Promise<CampaignRow[]> {
+  const groups = await listCountryGroups();
+  const keep = new Set<string>(["Sin país / Multi"]);   // bucket propio
+  const money = new Map<string, number>();
+  for (const r of rows) {
+    if (r.channel !== "Otros") keep.add(r.country);
+    money.set(r.country, (money.get(r.country) ?? 0) + r.pipeline + r.sql);
+  }
+  for (const [country, m] of money) if (m > 0) keep.add(country);
+  return rows.map((r) =>
+    keep.has(r.country) ? r : { ...r, country: collapseCountry(r.country, groups) },
+  );
 }
 
 // Overrides locales de país (Explorer) se aplican siempre encima, vengan
