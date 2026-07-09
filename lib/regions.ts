@@ -19,11 +19,50 @@ export const DEFAULT_GROUPS: CountryGroups = {
   US: REST_OF_INTL, MX: REST_OF_INTL, PT: REST_OF_INTL, NL: REST_OF_INTL,
 };
 
+// Espejo JS de la función SQL normalize_country() (migración 0014): pasa el
+// texto libre de país ("Spain", "España"…) al mismo código canónico que usan
+// las campañas. Se aplica al LEER (fachadas lib/data/*) como cinturón de
+// seguridad contra etiquetas sin normalizar que ya viven en la base
+// (country_parsed de campañas/contactos, overrides antiguos) — sin esto,
+// "Spain" y "ES" aparecen como dos países distintos en filtros y pivots.
+const COUNTRY_LABELS: Record<string, string> = {
+  es: "ES", spain: "ES", "españa": "ES", espana: "ES", espagne: "ES",
+  uk: "UK", gb: "UK", "united kingdom": "UK", "great britain": "UK",
+  "reino unido": "UK", england: "UK",
+  de: "DE", germany: "DE", alemania: "DE", deutschland: "DE",
+  fr: "FR", france: "FR", francia: "FR",
+  it: "IT", italy: "IT", italia: "IT",
+  us: "US", usa: "US", "united states": "US", "united states of america": "US",
+  "estados unidos": "US", eeuu: "US", "ee.uu.": "US",
+  mx: "MX", mexico: "MX", "méxico": "MX",
+  pt: "PT", portugal: "PT",
+  nl: "NL", netherlands: "NL", "paises bajos": "NL", "países bajos": "NL",
+  at: "AT", austria: "AT",
+  ch: "CH", switzerland: "CH", suiza: "CH", schweiz: "CH",
+};
+
+export function normalizeCountryLabel(raw: string): string {
+  const t = raw.trim();
+  if (!t) return NO_COUNTRY;
+  return COUNTRY_LABELS[t.toLowerCase()] ?? t;
+}
+
+// Prefijo de los buckets de países SIN actividad paid, colapsados en su
+// región para no llenar pivots y listados con la cola larga de orígenes
+// orgánicos ("Otros · Rest of International"). regionOf lo entiende para que
+// el filtro de región siga funcionando sobre filas colapsadas.
+export const OTHERS_PREFIX = "Otros · ";
+
+export function collapseCountry(country: string, groups: CountryGroups): string {
+  return OTHERS_PREFIX + regionOf(country, groups);
+}
+
 // Región de un país según el mapa. Países desconocidos → Rest of
 // International; el bucket "Sin país / Multi" es su propio grupo para que
 // no contamine ninguna región.
 export function regionOf(country: string, groups: CountryGroups): string {
   if (country === NO_COUNTRY) return NO_COUNTRY;
+  if (country.startsWith(OTHERS_PREFIX)) return country.slice(OTHERS_PREFIX.length);
   return groups[country] ?? REST_OF_INTL;
 }
 

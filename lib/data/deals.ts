@@ -6,6 +6,7 @@
 import { getSupabase } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { DbDealAttribution } from "@/lib/supabase/types";
+import { normalizeCountryLabel } from "@/lib/regions";
 
 export type DealRow = {
   dealId: string;
@@ -52,7 +53,7 @@ function fromDbRow(r: DbDealAttribution): DealRow {
     pipelineLabel: r.pipeline_label,
     channel: r.channel,
     campaign: r.campaign,
-    country: r.country,
+    country: normalizeCountryLabel(r.country),
     contactCreatedMonth: r.contact_created_month,
   };
 }
