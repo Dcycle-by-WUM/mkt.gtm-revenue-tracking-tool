@@ -37,7 +37,7 @@ const PROPS_CONTACT = [
 ] as const;
 
 const PROPS_DEAL = [
-  "amount", "amount_in_home_currency", "dealstage", "pipeline",
+  "dealname", "amount", "amount_in_home_currency", "dealstage", "pipeline",
   "hs_analytics_source", "createdate", "closedate",
 ] as const;
 
@@ -267,6 +267,7 @@ async function batchReadContacts(ids: string[]): Promise<HsContact[]> {
 
 export type HsDeal = {
   hubspot_deal_id: string;
+  dealname: string | null;
   amount: number;
   amount_in_home_currency: number | null;
   dealstage: string | null;
@@ -347,6 +348,7 @@ export async function fetchDeals(): Promise<HsDeal[]> {
     const p = r.properties;
     return {
       hubspot_deal_id: r.id,
+      dealname: p.dealname,
       amount: Number(p.amount_in_home_currency ?? p.amount ?? 0),
       amount_in_home_currency: p.amount_in_home_currency
         ? Number(p.amount_in_home_currency)
