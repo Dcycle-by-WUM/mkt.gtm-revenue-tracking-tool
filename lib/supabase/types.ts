@@ -115,6 +115,8 @@ export type DbDeal = {
   hubspot_company_id: string | null;
   createdate: string | null;
   closedate: string | null;
+  is_closed_won: boolean | null;             // flags de HubSpot (0017); null hasta el primer sync tras la migración
+  is_closed: boolean | null;
   synced_at: string;
 };
 
@@ -247,8 +249,9 @@ export type DbKpiOrganicByMonth = {
   closed_won: number;
 };
 
-// Vista `deal_attribution` (migración 0014) — grano = deal (no agregada).
-// País ya resuelto con la precedencia pipeline-map > campaña > contacto.
+// Vista `deal_attribution` (migraciones 0014/0017) — grano = deal (no
+// agregada). País ya resuelto con la precedencia pipeline-map > campaña >
+// contacto > 'INTL'. Solo pipelines con fila en pipeline_country_map.
 export type DbDealAttribution = {
   hubspot_deal_id: string;
   dealname: string;
@@ -256,8 +259,10 @@ export type DbDealAttribution = {
   amount: number;
   dealstage: string | null;
   is_closed_won: boolean;
+  is_closed: boolean;
   pipeline_id: string | null;
   pipeline_label: string;
+  business_region: string | null;            // región de negocio por pipeline (Spain / Rest of International)
   channel: string;                           // LinkedIn / Google / Otros
   campaign: string | null;
   campaign_id: string | null;
