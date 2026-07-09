@@ -68,6 +68,7 @@ export type DbContact = {
   hubspot_owner_id: string | null;
   lifecyclestage: string | null;
   lead_status: string | null;
+  lead_source: string | null;
   analytics_source: string | null;
   utm_campaign_raw: string | null;
   utm_campaign_norm: string | null;
@@ -104,10 +105,12 @@ export type DbAccount = {
 export type DbDeal = {
   id: string;
   hubspot_deal_id: string;
+  dealname: string | null;
   amount: number;
   amount_in_home_currency: number | null;
   dealstage: string | null;
   pipeline: string | null;
+  analytics_source: string | null;
   hubspot_contact_id: string | null;
   hubspot_company_id: string | null;
   createdate: string | null;
@@ -242,6 +245,26 @@ export type DbKpiOrganicByMonth = {
   sql: number;
   pipeline: number;
   closed_won: number;
+};
+
+// Vista `deal_attribution` (migración 0014) — grano = deal (no agregada).
+// País ya resuelto con la precedencia pipeline-map > campaña > contacto.
+export type DbDealAttribution = {
+  hubspot_deal_id: string;
+  dealname: string;
+  month: string;                             // YYYY-MM del createdate del deal
+  amount: number;
+  dealstage: string | null;
+  is_closed_won: boolean;
+  pipeline_id: string | null;
+  pipeline_label: string;
+  channel: string;                           // LinkedIn / Google / Otros
+  campaign: string | null;
+  campaign_id: string | null;
+  country: string;
+  hubspot_contact_id: string | null;
+  contact_created_at: string | null;
+  contact_created_month: string | null;      // YYYY-MM del contacto
 };
 
 export type DbOrganicTraffic = {

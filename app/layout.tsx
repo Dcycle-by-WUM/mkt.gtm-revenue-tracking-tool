@@ -15,6 +15,7 @@ const nav: { href: string; label: string; status?: "onhold" }[] = [
   { href: "/paid", label: "Paid Media Performance" },
   { href: "/campaign-detail", label: "Campaign Detail" },
   { href: "/forecast", label: "Pipeline & Forecast" },
+  { href: "/deals", label: "Deals & Atribución" },
   { href: "/explorer", label: "Explorer (pivot)" },
   { href: "/abm-accounts", label: "ABM — Cuentas", status: "onhold" },
   { href: "/abm-timeline", label: "ABM — Account Timeline", status: "onhold" },
