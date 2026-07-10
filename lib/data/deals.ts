@@ -15,12 +15,25 @@ export type DealRow = {
   amount: number;
   dealstage: string | null;
   isClosedWon: boolean;
+  isClosed: boolean;
   pipelineLabel: string;
+  // Región de negocio por pipeline (AE → Spain, International → Rest of
+  // International). Manda sobre regionOf(country) al filtrar por región:
+  // un contacto alemán en International Pipeline NO es DACH.
+  businessRegion: string | null;
   channel: string;
   campaign: string | null;
   country: string;
   contactCreatedMonth: string | null;
 };
+
+// Estado del deal para la pantalla: abierto / ganado / perdido.
+export type DealState = "abierto" | "ganado" | "cerrado";
+
+export function dealState(row: Pick<DealRow, "isClosedWon" | "isClosed">): DealState {
+  if (row.isClosedWon) return "ganado";
+  return row.isClosed ? "cerrado" : "abierto";
+}
 
 // Cohorte del lead que originó el deal. El corte "2026" responde a la
 // pregunta de negocio "¿qué deals vienen del esfuerzo reciente de mktg?";
@@ -36,10 +49,10 @@ export function leadCohort(row: Pick<DealRow, "contactCreatedMonth">): LeadCohor
 // Dataset de ejemplo para cuando Supabase no está vivo (mismo criterio que
 // el resto de fachadas: la pantalla enseña algo coherente con el mock).
 const mockDeals: DealRow[] = [
-  { dealId: "m1", dealname: "Acme Logistics - SaaS ESG", month: "2026-06", amount: 24000, dealstage: "proposal", isClosedWon: false, pipelineLabel: "AE Pipeline", channel: "LinkedIn", campaign: "esp_mensaje_españa_documento [mofu]", country: "ES", contactCreatedMonth: "2026-04" },
-  { dealId: "m2", dealname: "Verde Retail - HC + CSRD", month: "2026-06", amount: 18000, dealstage: "closedwon", isClosedWon: true, pipelineLabel: "AE Pipeline", channel: "Google", campaign: "lm_calculadora-hdc-2025-es", country: "ES", contactCreatedMonth: "2026-03" },
-  { dealId: "m3", dealname: "Nordwind GmbH - PPWR", month: "2026-06", amount: 31000, dealstage: "negotiation", isClosedWon: false, pipelineLabel: "International Pipeline", channel: "Otros", campaign: null, country: "DE", contactCreatedMonth: "2025-11" },
-  { dealId: "m4", dealname: "Portola Foods - Upsell reporting", month: "2026-05", amount: 12500, dealstage: "qualification", isClosedWon: false, pipelineLabel: "AE Pipeline", channel: "Otros", campaign: null, country: "ES", contactCreatedMonth: null },
+  { dealId: "m1", dealname: "Acme Logistics - SaaS ESG", month: "2026-06", amount: 24000, dealstage: "proposal", isClosedWon: false, isClosed: false, pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "LinkedIn", campaign: "esp_mensaje_españa_documento [mofu]", country: "ES", contactCreatedMonth: "2026-04" },
+  { dealId: "m2", dealname: "Verde Retail - HC + CSRD", month: "2026-06", amount: 18000, dealstage: "closedwon", isClosedWon: true, isClosed: true, pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Google", campaign: "lm_calculadora-hdc-2025-es", country: "ES", contactCreatedMonth: "2026-03" },
+  { dealId: "m3", dealname: "Nordwind GmbH - PPWR", month: "2026-06", amount: 31000, dealstage: "negotiation", isClosedWon: false, isClosed: false, pipelineLabel: "International Pipeline", businessRegion: "Rest of International", channel: "Otros", campaign: null, country: "DE", contactCreatedMonth: "2025-11" },
+  { dealId: "m4", dealname: "Portola Foods - Upsell reporting", month: "2026-05", amount: 12500, dealstage: "qualification", isClosedWon: false, isClosed: false, pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Otros", campaign: null, country: "ES", contactCreatedMonth: null },
 ];
 
 function fromDbRow(r: DbDealAttribution): DealRow {
@@ -50,7 +63,9 @@ function fromDbRow(r: DbDealAttribution): DealRow {
     amount: Number(r.amount) || 0,
     dealstage: r.dealstage,
     isClosedWon: r.is_closed_won,
+    isClosed: r.is_closed,
     pipelineLabel: r.pipeline_label,
+    businessRegion: r.business_region,
     channel: r.channel,
     campaign: r.campaign,
     country: normalizeCountryLabel(r.country),

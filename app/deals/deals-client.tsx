@@ -5,7 +5,7 @@ import { FilterBar } from "@/components/FilterBar";
 import { emptyFilters } from "@/lib/mock-data";
 import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur } from "@/lib/kpis";
-import { leadCohort, type DealRow, type LeadCohort } from "@/lib/data/deals";
+import { dealState, leadCohort, type DealRow, type DealState, type LeadCohort } from "@/lib/data/deals";
 
 const COHORT_BADGE: Record<LeadCohort, string> = {
   "2026": "bg-[var(--good-bg)] text-[var(--good-text)]",
@@ -19,15 +19,32 @@ const COHORT_LABEL: Record<LeadCohort, string> = {
   "sin contacto": "Sin contacto",
 };
 
+const STATE_BADGE: Record<DealState, string> = {
+  ganado: "bg-[var(--good-bg)] text-[var(--good-text)]",
+  cerrado: "bg-[var(--subtle)] text-[var(--muted)]",
+  abierto: "bg-[var(--info-bg)] text-[var(--info-text)]",
+};
+
+const STATE_LABEL: Record<DealState, string> = {
+  ganado: "Won",
+  cerrado: "Perdido",
+  abierto: "Abierto",
+};
+
 export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: CountryGroups }) {
   const [filters, setFilters] = useState(emptyFilters);
   const [cohortFilter, setCohortFilter] = useState<"" | LeadCohort>("");
+  const [stateFilter, setStateFilter] = useState<"" | DealState>("");
 
+  // Región: manda la de negocio por pipeline (AE → Spain, International →
+  // Rest of International); regionOf(country) solo como fallback para filas
+  // anteriores a la migración 0017.
   const matchesBase = (r: DealRow) =>
-    (!filters.region || regionOf(r.country, groups) === filters.region) &&
+    (!filters.region || (r.businessRegion ?? regionOf(r.country, groups)) === filters.region) &&
     (!filters.country || r.country === filters.country) &&
     (!filters.month || r.month === filters.month) &&
-    (!filters.channel || r.channel === filters.channel);
+    (!filters.channel || r.channel === filters.channel) &&
+    (!stateFilter || dealState(r) === stateFilter);
 
   const rows = initial.filter((r) => matchesBase(r) && (!cohortFilter || leadCohort(r) === cohortFilter));
 
@@ -87,6 +104,13 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
           <option value="histórico">Lead histórico (anterior a 2026)</option>
           <option value="sin contacto">Sin contacto asociado</option>
         </select>
+        <span className="text-xs uppercase tracking-wide text-[var(--muted)]">Estado</span>
+        <select className={sel} value={stateFilter} onChange={(e) => setStateFilter(e.target.value as "" | DealState)}>
+          <option value="">Todos</option>
+          <option value="abierto">Abiertos</option>
+          <option value="ganado">Ganados</option>
+          <option value="cerrado">Perdidos / cerrados</option>
+        </select>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
@@ -111,11 +135,9 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
                 <tr key={r.dealId} className="border-t border-[var(--border)]">
                   <td className="px-4 py-2.5">
                     {r.dealname}
-                    {r.isClosedWon && (
-                      <span className="ml-2 rounded bg-[var(--good-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--good-text)]">
-                        Won
-                      </span>
-                    )}
+                    <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${STATE_BADGE[dealState(r)]}`}>
+                      {STATE_LABEL[dealState(r)]}
+                    </span>
                   </td>
                   <td className="px-4 py-2.5 tabular-nums">{r.month}</td>
                   <td className="px-4 py-2.5">{r.pipelineLabel}</td>

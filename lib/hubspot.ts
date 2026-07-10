@@ -39,6 +39,7 @@ const PROPS_CONTACT = [
 const PROPS_DEAL = [
   "dealname", "amount", "amount_in_home_currency", "dealstage", "pipeline",
   "hs_analytics_source", "createdate", "closedate",
+  "hs_is_closed_won", "hs_is_closed",
 ] as const;
 
 const PROPS_COMPANY = [
@@ -76,10 +77,11 @@ export type HsContact = {
   created_at_hs: string | null;
 };
 
-// MQL = todo contacto que NO haya sido descalificado por marketing.
-// NULL/vacío = aún no clasificado → cuenta como MQL (coincide con HubSpot).
+// MQL = Lead Status ∉ {MK NOT QUALIFIED, vacío} — DECISIONES #1. Los vacíos
+// (aún sin clasificar) NO cuentan como MQL; el código contaba los vacíos y
+// contradecía la decisión cerrada (auditoría 09-jul: 8 de 1.066 inbound 2026).
 function deriveMql(leadStatus: string | null): boolean {
-  if (!leadStatus || !leadStatus.trim()) return true;
+  if (!leadStatus || !leadStatus.trim()) return false;
   return leadStatus.trim().toUpperCase() !== "MK NOT QUALIFIED";
 }
 
@@ -277,6 +279,11 @@ export type HsDeal = {
   hubspot_company_id: string | null;
   createdate: string | null;
   closedate: string | null;
+  // Flags calculados por HubSpot. Los stages de este portal son IDs
+  // numéricos por pipeline ('22516636' = Closed won del AE Pipeline…), así
+  // que `dealstage = 'closedwon'` no sirve para detectar ganados.
+  is_closed_won: boolean;
+  is_closed: boolean;
 };
 
 // Pipelines a incluir. Vacío = todos (sin filtro).
@@ -360,6 +367,8 @@ export async function fetchDeals(): Promise<HsDeal[]> {
       hubspot_company_id: companyMap.get(r.id) ?? null,
       createdate: p.createdate,
       closedate: p.closedate,
+      is_closed_won: p.hs_is_closed_won === "true",
+      is_closed: p.hs_is_closed === "true",
     };
   });
 }
