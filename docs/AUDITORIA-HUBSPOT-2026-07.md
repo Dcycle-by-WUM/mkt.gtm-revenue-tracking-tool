@@ -219,6 +219,81 @@ En el tracker además hay una fila (Jaime Yrazusta, BBVA, 15-abr) que no
 aparece como contacto inbound de abril-mayo en HubSpot — pendiente de
 localizar (¿lead_source distinto, borrado o fusionado?).
 
+## 3.6 Reconciliación de PIPELINE con el tracker de Davide (10-jul, tarde)
+
+Davide reporta que filtrando Spain + enero-2026 el pipeline de la plataforma
+no se parece al suyo. Diff deal a deal de las **39 filas con importe** de su
+tracker (36 deals únicos) contra los 433 deals reales de HubSpot:
+
+### El caso concreto: enero 2026 · Spain
+
+| Deal (tracker) | € | Qué hace la plataforma | Por qué |
+| --- | ---: | --- | --- |
+| CANPIPORK | 5.000 | ✅ Enero | Deal creado 26-ene, Direct Traffic, AE |
+| Cox Energy | 15.000 | ➡️ **Febrero** | Contacto creado 29-ene pero el **deal** se creó el 9-feb — la plataforma atribuye por mes del deal (decisión 0013) |
+| SOCOTEC | 11.200 | ❌ **Excluido** | El deal lo creó sales a mano el 30-abr (CRM_UI) → HubSpot le pone fuente **OFFLINE**, aunque el contacto (Felipe Barrena) es Paid Social/LinkedIn y MQL |
+
+Tracker: **31.200 €** · Plataforma: **5.000 €**. Diferencia 100% explicada.
+
+### Descomposición de los 36 deals únicos del tracker
+
+| Tratamiento en la plataforma | Deals | Importe |
+| --- | ---: | ---: |
+| ✅ Incluido, mismo mes | 16 | 309.504 € |
+| ➡️ Incluido, otro mes (mes del deal ≠ mes del contacto) | 10 | 201.700 € |
+| ❌ Excluido: deal con fuente OFFLINE | 9 | 167.595 € |
+| ❌ Excluido: pipeline DACH (RONAL Wheels) | 1 | 26.550 € |
+
+### Causa 1 — grano: mes del contacto (tracker) vs mes del deal (plataforma)
+
+El tracker cuelga el importe del mes en que se creó el **contacto**; la
+plataforma, del mes del **deal** (decisión 0013, cerrada con Davide el
+09-jul: es lo que hace comparable pipeline con esfuerzo comercial del mes).
+Los deals suelen crearse 1–3 meses después del contacto (Dacsa: contacto
+feb → deal abr; Martinrea: contacto mar → deal abr; Ubesol: contacto mar →
+deal abr; Hortifrut: contacto mar → deal abr…). No es un error de nadie:
+son dos convenciones distintas. La pantalla /deals muestra ambas fechas
+(columna "Contacto creado") para poder cruzarlas.
+
+### Causa 2 — deals creados a mano por sales heredan fuente OFFLINE ⚠️
+
+**194.145 € en 10 deals** que el tracker considera inbound tienen en HubSpot
+fuente OFFLINE porque el deal se creó por CRM_UI / IMPORT / integración — el
+rollup de HubSpot ignora al contacto real que lo originó:
+
+| Deal | € | Contacto origen (real) |
+| --- | ---: | --- |
+| SERVEO (60691196042) | 40.000 | Pilar Díaz (24-feb) |
+| Grupo Aluman (58354250159) | 39.600 | Álvaro Porta (12-feb) |
+| RONAL Wheels (60028458851) | 26.550 | Mario Blasco (27-may, Paid Social) — además está en pipeline DACH |
+| Savills (61352544676) | 25.000 | Sergio de Jaime (10-jun) |
+| Grupo Ubesol (58953474468) | 19.295 | Verónica Julián (2-mar) |
+| SOCOTEC España (59963208257) | 11.200 | Felipe Barrena (13-ene, **Paid Social, MQL**) |
+| Mitsubishi Electric (61024992796) | 9.000 | Sandra Arnáiz (11-may) |
+| BARDINET (61776571232) | 9.000 | Dolors Cars (24-jun) |
+| Informa D&B (59680291454) | 7.500 | Jesús Pillado (8-abr) |
+| Talleres Mecánicos del Sur (56831853326) | 7.000 | Mario Fernández (19-feb) |
+
+**Decisión (Davide, 10-jul): SÍ al fallback** — si el deal es OFFLINE pero
+su contacto asociado es `lead_source=Inbound` explícito (y no interno
+@dcycle.io), el deal cuenta como inbound con el canal del contacto; el mes
+sigue siendo el del deal. Implementado en la migración 0020 (DECISIONES
+#14); /deals marca estos deals con la etiqueta "vía contacto". RONAL Wheels
+queda además condicionado a resolver su pipeline (está en DACH — pendiente
+aclaración de Davide).
+
+### Causa 3 — errores del propio tracker (a corregir en el Excel)
+
+- **Filas duplicadas** que doblan importes: Cox Energy 2× (Spain + "To
+  Assign Manually"), Serveo 2× (¡Spain y Mexico a la vez!), GTT 2× (marzo).
+- **País**: M Moser figura como Spain en el tracker (es UK, campaña
+  `ev_uk_report26`); Serveo como Mexico en una de sus filas (es Spain).
+- SGK = deal "Propelis Group" (60.000, UK ✓); SWECO AB = deal "Brockton
+  Everlast" (14.000, UK) — mismos deals con otro nombre de empresa.
+- RONAL Wheels: el tracker lo cuenta como Spain pero el deal está en el
+  **pipeline DACH** de HubSpot (contacto español de ronalgroup.com) —
+  ¿deal mal ubicado en HubSpot o debe contar como DACH?
+
 ## 4. Qué queda pendiente de decidir
 
 1. Confirmar los deals de §3.1/§3.2 (país/campaña/contacto) y aplicar los

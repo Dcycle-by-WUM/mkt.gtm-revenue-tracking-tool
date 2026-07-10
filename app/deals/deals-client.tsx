@@ -141,7 +141,17 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
                   </td>
                   <td className="px-4 py-2.5 tabular-nums">{r.month}</td>
                   <td className="px-4 py-2.5">{r.pipelineLabel}</td>
-                  <td className="px-4 py-2.5">{r.channel}</td>
+                  <td className="px-4 py-2.5">
+                    {r.channel}
+                    {r.attributionVia === "contacto" && (
+                      <span
+                        className="ml-1.5 rounded bg-[var(--subtle)] px-1 py-0.5 text-[10px] text-[var(--muted)]"
+                        title="Deal con fuente OFFLINE (creado a mano por sales); entra como inbound por su contacto Inbound"
+                      >
+                        vía contacto
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-[var(--muted)]">{r.campaign ?? "—"}</td>
                   <td className="px-4 py-2.5">{r.country}</td>
                   <td className="px-4 py-2.5 tabular-nums">{r.contactCreatedMonth ?? "—"}</td>

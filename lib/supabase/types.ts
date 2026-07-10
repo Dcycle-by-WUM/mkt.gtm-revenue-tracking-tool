@@ -264,6 +264,7 @@ export type DbDealAttribution = {
   pipeline_label: string;
   business_region: string | null;            // región de negocio por pipeline (Spain / Rest of International)
   channel: string;                           // LinkedIn / Google / Otros
+  attribution_via: "deal" | "contacto";      // 'contacto' = deal OFFLINE rescatado por contacto Inbound (0020)
   campaign: string | null;
   campaign_id: string | null;
   country: string;
