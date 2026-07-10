@@ -274,10 +274,13 @@ rollup de HubSpot ignora al contacto real que lo originó:
 | Informa D&B (59680291454) | 7.500 | Jesús Pillado (8-abr) |
 | Talleres Mecánicos del Sur (56831853326) | 7.000 | Mario Fernández (19-feb) |
 
-**Decisión pendiente (Davide)**: ¿regla de fallback? — si el deal es OFFLINE
-pero su contacto asociado es `lead_source=Inbound` (y no interno), tratar el
-deal como inbound con el canal del contacto. Recupera estos 194K para
-marketing manteniendo el grano por deal.
+**Decisión (Davide, 10-jul): SÍ al fallback** — si el deal es OFFLINE pero
+su contacto asociado es `lead_source=Inbound` explícito (y no interno
+@dcycle.io), el deal cuenta como inbound con el canal del contacto; el mes
+sigue siendo el del deal. Implementado en la migración 0020 (DECISIONES
+#14); /deals marca estos deals con la etiqueta "vía contacto". RONAL Wheels
+queda además condicionado a resolver su pipeline (está en DACH — pendiente
+aclaración de Davide).
 
 ### Causa 3 — errores del propio tracker (a corregir en el Excel)
 
