@@ -174,6 +174,51 @@ tienen contacto 2026 coherente con su fuente. ✅
 
 ---
 
+## 3.5 Reconciliación con el tracker manual de Davide (10-jul)
+
+Davide comparó su tracker manual (CSV "International Inbound / Paid Media
+Tracker", que a pesar del nombre incluye Spain) con los números de §2.1 y no
+cuadraban. Diff contacto a contacto (abril-mayo completo, por nombre):
+
+| Mes 2026 | Tracker Davide | HubSpot inbound bruto | HubSpot **sin tests** |
+| --- | ---: | ---: | ---: |
+| Ene | 169 | 170 | pendiente de cuantificar |
+| Feb | 286 | 287 | pendiente de cuantificar |
+| Mar | 172 | 175 | pendiente de cuantificar |
+| Abr | 134 | 154 | **128** |
+| May | 86 | 98–99 | **89** |
+
+Cuatro causas, todas verificadas:
+
+1. **Contactos de prueba internos** (la causa gorda). HubSpot tiene **83
+   contactos "alba ortiz"** creados en 2026 con emails internos
+   (`alba+*@dcycle.io`, `alba.ortiz+claude-e2e-*@dcycle.io`), más
+   `paula.cons+test*`, `cristina.alcala-zamora.test*`, `real-demo-*` — pruebas
+   de formularios/demos/E2E del equipo. Muchos entran con
+   `lead_source=Inbound` (26 de los 154 de abril; 10 de los ~99 de mayo) y
+   varios hasta con lead status MQL. El tracker de Davide también los
+   arrastra pero en distinta cantidad (13 en abril, 6 en mayo, 14 en enero…),
+   así que ambos lados estaban inflados de forma distinta. **Fix**: migración
+   0019 + filtro en ingesta (`lib/hubspot.ts`) — un email `@dcycle.io` nunca
+   es un lead. Quedan 2 falsos con dominio externo para borrar a mano en
+   HubSpot: `pruebas@googads.com` y `antonio@sinapellidos.com` (29/30-may,
+   MK NOT QUALIFIED).
+2. **~20 contactos reales de finales de abril / primeros de mayo que faltan
+   en el tracker** (29-abr a 9-may casi todos MK NOT QUALIFIED, más Adrian
+   Gamboa MEETING 10-abr, Cynthia Lafuente 14-abr, Fernanda Jimena Alonso de
+   Europastry MEETING 21-may). Consistente con un corte/exportación manual
+   que no recogió la cola del mes.
+3. **`lead_source` se rellena a posteriori**: p. ej. el contacto de SunExpress
+   era Outbound hasta que lo corregimos hoy a Inbound — un snapshot manual
+   congela lo que era verdad ese día; la query en vivo lo ve distinto.
+4. **Zona horaria**: la API devuelve UTC; el tracker usa hora de Madrid.
+   Taiwo Falope (31-may 23:33 UTC = 1-jun 01:33 CEST) cae en mayo para la
+   API y en junio para el tracker.
+
+En el tracker además hay una fila (Jaime Yrazusta, BBVA, 15-abr) que no
+aparece como contacto inbound de abril-mayo en HubSpot — pendiente de
+localizar (¿lead_source distinto, borrado o fusionado?).
+
 ## 4. Qué queda pendiente de decidir
 
 1. Confirmar los deals de §3.1/§3.2 (país/campaña/contacto) y aplicar los

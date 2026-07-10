@@ -238,7 +238,13 @@ export async function fetchContacts(): Promise<HsContact[]> {
     filterGroups: [{ filters }],
     sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
   });
-  return records.map(mapContact);
+  // Emails internos fuera: las pruebas de formularios/demos/E2E del equipo
+  // (alba+*@dcycle.io, paula.cons+test*@dcycle.io…) entran en HubSpot como
+  // lead_source=Inbound e inflan Leads/MQL (26 de 154 inbound en abr-2026).
+  // La migración 0019 aplica el mismo filtro en las vistas para lo ya
+  // sincronizado. batchReadContacts NO filtra: esos contactos solo aportan
+  // atribución de campaña/país a deals, no cuentan como leads.
+  return records.map(mapContact).filter((c) => !c.email || !/@dcycle\.io$/i.test(c.email));
 }
 
 // Batch-read por ID, sin filtro de fecha ni de lead_source — para no perder
