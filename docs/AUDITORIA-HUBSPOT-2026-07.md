@@ -180,13 +180,21 @@ Davide comparó su tracker manual (CSV "International Inbound / Paid Media
 Tracker", que a pesar del nombre incluye Spain) con los números de §2.1 y no
 cuadraban. Diff contacto a contacto (abril-mayo completo, por nombre):
 
-| Mes 2026 | Tracker Davide | HubSpot inbound bruto | HubSpot **sin tests** |
-| --- | ---: | ---: | ---: |
-| Ene | 169 | 170 | pendiente de cuantificar |
-| Feb | 286 | 287 | pendiente de cuantificar |
-| Mar | 172 | 175 | pendiente de cuantificar |
-| Abr | 134 | 154 | **128** |
-| May | 86 | 98–99 | **89** |
+| Mes 2026 | Tracker Davide | HubSpot inbound bruto | Tests @dcycle.io | HubSpot **limpio** |
+| --- | ---: | ---: | ---: | ---: |
+| Ene | 169 | 170 | 13 | **157** |
+| Feb | 286 | 287 | 10 | **277** |
+| Mar | 172 | 175 | 10 | **165** |
+| Abr | 134 | 154 | 26 | **128** |
+| May | 86 | 99 | 8 | **91**† |
+
+† En mayo quedan además los 2 falsos externos (`pruebas@googads.com`,
+`antonio@sinapellidos.com`, ambos MK NOT QUALIFIED) que el filtro por
+dominio no cubre — al borrarlos a mano, mayo limpio = **89**.
+
+MQL limpio (regla DECISIONES #1, sin tests): Ene **95** · Feb **215** ·
+Mar **88** · Abr **73** · May **58**. (Los tests inflaban el MQL de abril
+en 14: doce con lead status NEW y dos más, y el de mayo en 4.)
 
 Cuatro causas, todas verificadas:
 
@@ -215,9 +223,11 @@ Cuatro causas, todas verificadas:
    Taiwo Falope (31-may 23:33 UTC = 1-jun 01:33 CEST) cae en mayo para la
    API y en junio para el tracker.
 
-En el tracker además hay una fila (Jaime Yrazusta, BBVA, 15-abr) que no
-aparece como contacto inbound de abril-mayo en HubSpot — pendiente de
-localizar (¿lead_source distinto, borrado o fusionado?).
+La fila del tracker que no aparecía (Jaime Yrazusta, BBVA, "15-abr"):
+localizado — el contacto existe (220207108626, lead_source Inbound, fuente
+OFFLINE) pero se creó el **13-ene-2023**. El "15-abr-2026" del tracker es
+una **re-conversión** (nuevo envío de formulario), no la creación del
+contacto: no pertenece a la cohorte de contactos creados en 2026.
 
 ## 3.6 Reconciliación de PIPELINE con el tracker de Davide (10-jul, tarde)
 
