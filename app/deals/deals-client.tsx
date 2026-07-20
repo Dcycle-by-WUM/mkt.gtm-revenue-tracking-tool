@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FilterBar } from "@/components/FilterBar";
-import { emptyFilters } from "@/lib/mock-data";
+import { emptyFilters, inMonthRange } from "@/lib/mock-data";
 import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur } from "@/lib/kpis";
 import { dealState, leadCohort, type DealRow, type DealState, type LeadCohort } from "@/lib/data/deals";
@@ -43,6 +43,7 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
     (!filters.region || (r.businessRegion ?? regionOf(r.country, groups)) === filters.region) &&
     (!filters.country || r.country === filters.country) &&
     (!filters.month || r.month === filters.month) &&
+    inMonthRange(r.month, filters) &&
     (!filters.channel || r.channel === filters.channel) &&
     (!stateFilter || dealState(r) === stateFilter);
 

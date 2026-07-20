@@ -4,14 +4,19 @@ import { useState, useTransition } from "react";
 import { Panel } from "@/components/Page";
 import { FilterBar } from "@/components/FilterBar";
 import { PivotTable } from "@/components/PivotTable";
+import { MatrixTable } from "@/components/MatrixTable";
+import { SavedViews } from "@/components/SavedViews";
 import {
-  filterCampaigns, paidCountriesOf, monthsOf, emptyFilters, NO_COUNTRY,
-  applyOverrides, type CampaignRow, type CountryOverrides,
+  filterCampaigns, paidCountriesOf, monthsOf, emptyFilters, currentYearStart, NO_COUNTRY,
+  applyOverrides, type CampaignRow, type CountryOverrides, type Dimension, type Filters, type MetricKey,
 } from "@/lib/mock-data";
 import type { CountryGroups } from "@/lib/regions";
 import { actionSetCountryOverride, actionClearCountryOverride } from "@/app/actions";
 
 const COUNTRY_OPTIONS = [NO_COUNTRY, "ES", "UK", "DE", "FR", "US", "MX", "IT"];
+
+// Estado guardable de la vista (filtros + configuración de la matriz).
+type ExplorerView = { filters: Filters; rowDim: Dimension; metric: MetricKey };
 
 export function ExplorerClient({
   campaigns: initialCampaigns,
@@ -23,8 +28,17 @@ export function ExplorerClient({
   overrides: CountryOverrides;
 }) {
   const [overrides, setOverrides] = useState(initialOverrides);
-  const [filters, setFilters] = useState(emptyFilters);
+  // Arranca en el año en curso para no ver la cola de años viejos.
+  const [filters, setFilters] = useState<Filters>(() => ({ ...emptyFilters, monthFrom: currentYearStart() }));
+  const [rowDim, setRowDim] = useState<Dimension>("country");
+  const [metric, setMetric] = useState<MetricKey>("pipeline");
   const [, startTransition] = useTransition();
+
+  const loadView = (v: ExplorerView) => {
+    setFilters(v.filters);
+    setRowDim(v.rowDim);
+    setMetric(v.metric);
+  };
 
   const all = applyOverrides(initialCampaigns, overrides);
   const rows = filterCampaigns(all, filters, groups);
@@ -54,6 +68,11 @@ export function ExplorerClient({
 
   return (
     <>
+      <SavedViews<ExplorerView>
+        storageKey="dcycle.explorer.views"
+        current={{ filters, rowDim, metric }}
+        onLoad={loadView}
+      />
       <FilterBar
         filters={filters}
         setFilters={setFilters}
@@ -62,6 +81,15 @@ export function ExplorerClient({
         channels={[...new Set(all.map((r) => r.channel))].sort()}
         groups={groups}
       />
+
+      <h2 className="mb-2 text-base font-semibold">Comparación por mes</h2>
+      <p className="mb-3 text-xs text-[var(--muted)]">
+        Una métrica, {rowDim === "country" ? "país" : rowDim === "channel" ? "canal" : "campaña"} en filas y
+        meses en columnas, con totales. Cambia dimensión/métrica y el rango de meses arriba.
+      </p>
+      <MatrixTable rows={rows} rowDim={rowDim} metric={metric} onRowDim={setRowDim} onMetric={setMetric} />
+
+      <h2 className="mb-2 mt-10 text-base font-semibold">Tabla dinámica (multi-nivel)</h2>
       <PivotTable rows={rows} initialDims={["country"]} />
 
       <div className="mt-8">
