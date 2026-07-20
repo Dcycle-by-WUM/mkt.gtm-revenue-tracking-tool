@@ -90,14 +90,26 @@ type HsRecord = { id: string; properties: Record<string, string | null> };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Pausa entre páginas de la API de HubSpot. El rate limit típico es
+// ~100-190 req/10s; ~8 req/s deja margen y evita la tormenta de 429 que
+// hacía que sync-crm se quedara sin tiempo (cada 429 costaba ≥2s de espera).
+const PAGE_DELAY_MS = 120;
+
 async function hsRetry<T>(fn: () => Promise<Response>, label: string): Promise<T> {
-  const MAX_RETRIES = 3;
+  const MAX_RETRIES = 6;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const res = await fn();
     if (res.ok) return (await res.json()) as T;
-    if (res.status === 429 && attempt < MAX_RETRIES) {
-      const wait = Math.pow(2, attempt + 1) * 1000;
-      console.warn(`[hubspot] ${label}: 429 rate limit, retrying in ${wait / 1000}s…`);
+    // 429 (rate limit) y 5xx transitorios son reintentables.
+    const retriable = res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504;
+    if (retriable && attempt < MAX_RETRIES) {
+      // HubSpot manda `Retry-After` (segundos) en los 429 — respétalo. Si no,
+      // backoff exponencial con techo de 10s. Jitter para no sincronizar
+      // reintentos entre peticiones concurrentes.
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const base = retryAfter > 0 ? retryAfter * 1000 : Math.min(Math.pow(2, attempt) * 500, 10000);
+      const wait = base + Math.floor(Math.random() * 250);
+      console.warn(`[hubspot] ${label}: ${res.status}, retry ${attempt + 1}/${MAX_RETRIES} en ${(wait / 1000).toFixed(1)}s…`);
       await sleep(wait);
       continue;
     }
@@ -138,6 +150,7 @@ async function pageAll<T>(
     if (i === MAX_PAGES - 1) {
       console.warn(`[hubspot] ${label}: alcanzado límite de ${MAX_PAGES * 100} registros — puede haber datos truncados`);
     }
+    await sleep(PAGE_DELAY_MS);                 // pacing anti-429
   }
   return all;
 }
@@ -179,6 +192,7 @@ async function searchAll<T>(
     all.push(...page.results);
     after = page.paging?.next?.after;
     if (!after) break;
+    await sleep(PAGE_DELAY_MS);                 // pacing anti-429
   }
   return all;
 }
@@ -457,6 +471,43 @@ export type HsCompany = {
   is_target_abm: boolean;
 };
 
+function mapCompany(r: HsRecord): HsCompany {
+  const p = r.properties;
+  return {
+    hubspot_company_id: r.id,
+    name: p.name ?? "—",
+    domain: p.domain,
+    industry: p.industry,
+    country: p.country,
+    hubspot_owner_id: p.hubspot_owner_id,
+    is_target_abm: p.is_target_abm === "true",
+  };
+}
+
+async function batchReadCompanies(ids: string[]): Promise<HsCompany[]> {
+  if (ids.length === 0) return [];
+  const token = requireToken();
+  const all: HsRecord[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    const page = await hsRetry<{ results: HsRecord[] }>(
+      () => fetch(`${HUBSPOT_BASE}/crm/v3/objects/companies/batch/read`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ properties: [...PROPS_COMPANY], inputs: batch.map((id) => ({ id })) }),
+      }),
+      "batch/read companies",
+    );
+    all.push(...page.results);
+    if (i + 100 < ids.length) await sleep(PAGE_DELAY_MS);
+  }
+  return all.map(mapCompany);
+}
+
+// Backfill masivo de compañías (todas las creadas desde el cutoff). NO se
+// usa en el sync horario — traía ~10k compañías, disparaba el rate limit de
+// HubSpot y agotaba el tiempo. Se conserva para un backfill puntual de ABM
+// (on hold, DECISIONES #11) si algún día hace falta el universo completo.
 export async function fetchCompanies(): Promise<HsCompany[]> {
   const cutoff = backfillFrom();
   const records = await searchAll<HsRecord>("companies", {
@@ -466,18 +517,17 @@ export async function fetchCompanies(): Promise<HsCompany[]> {
     ] }],
     sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
   });
-  return records.map((r) => {
-    const p = r.properties;
-    return {
-      hubspot_company_id: r.id,
-      name: p.name ?? "—",
-      domain: p.domain,
-      industry: p.industry,
-      country: p.country,
-      hubspot_owner_id: p.hubspot_owner_id,
-      is_target_abm: p.is_target_abm === "true",
-    };
-  });
+  return records.map(mapCompany);
+}
+
+// Solo las compañías ASOCIADAS a deals (batch-read por id). Es lo único que
+// necesita la plataforma viva: el fallback de país del deal en
+// `deal_attribution` (join `accounts` por `hubspot_company_id`). Ventaja
+// extra sobre `fetchCompanies`: trae la compañía del deal aunque se creara
+// ANTES del cutoff (el filtro por fecha del fetch masivo se la saltaba).
+export async function fetchDealLinkedCompanies(deals: HsDeal[]): Promise<HsCompany[]> {
+  const ids = [...new Set(deals.map((d) => d.hubspot_company_id).filter((id): id is string => !!id))];
+  return batchReadCompanies(ids);
 }
 
 // Engagements (timeline) — V3 API.
