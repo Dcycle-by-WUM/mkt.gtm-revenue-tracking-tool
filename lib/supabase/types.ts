@@ -2,7 +2,13 @@
 // Mantenerlos a mano (en lugar de generarlos con `supabase gen types`) hasta
 // que el proyecto esté operativo y se cablee el CLI.
 
+// Canal de ADS (spend real): sólo LinkedIn/Google (Supermetrics).
 export type Channel = "LinkedIn" | "Google";
+
+// Canal de las vistas KPI / atribución de deals: incluye los buckets no-paid
+// que salen de `source_to_channel` (migración 0022). OFFLINE no aparece: se
+// excluye en la vista.
+export type ViewChannel = "LinkedIn" | "Google" | "Organic" | "Email Marketing" | "Otros";
 
 export type DbCampaign = {
   id: string;
@@ -117,6 +123,11 @@ export type DbDeal = {
   closedate: string | null;
   is_closed_won: boolean | null;             // flags de HubSpot (0017); null hasta el primer sync tras la migración
   is_closed: boolean | null;
+  // Señal de canal paid entre TODOS los contactos asociados al deal, no
+  // solo el primero (migración 0021 — caso Stadler). Null si ninguno de
+  // los contactos asociados es PAID_SOCIAL/PAID_SEARCH.
+  paid_contact_channel: string | null;       // 'LinkedIn' | 'Google' | null
+  paid_contact_id: string | null;            // qué contacto lo justifica
   synced_at: string;
 };
 
@@ -206,7 +217,7 @@ export type DbHeatWeights = {
 };
 
 export type DbKpiByCampaignMonth = {
-  channel: Channel;
+  channel: ViewChannel;
   campaign: string;
   country: string;
   month: string;                             // YYYY-MM
@@ -221,7 +232,7 @@ export type DbKpiByCampaignMonth = {
 };
 
 export type DbKpiByChannelMonth = {
-  channel: Channel;
+  channel: ViewChannel;
   country: string;
   month: string;
   spend: number;
@@ -234,9 +245,11 @@ export type DbKpiByChannelMonth = {
   closed_won: number;
 };
 
-// Bucket orgánico (no paid) — migración 0009. Sin `channel` propio en DB
-// (no viene de `campaigns.source`); se etiqueta "Otros" al mapear a CampaignRow.
+// Bucket no-paid por mes — migración 0009, con desglose de canal desde
+// 0022 (Organic / Email Marketing / Otros; OFFLINE excluido). Antes se
+// etiquetaba todo como "Otros" al mapear; ahora lleva su `channel`.
 export type DbKpiOrganicByMonth = {
+  channel: ViewChannel;
   country: string;
   month: string;
   spend: number;

@@ -290,6 +290,13 @@ export type HsDeal = {
   // que `dealstage = 'closedwon'` no sirve para detectar ganados.
   is_closed_won: boolean;
   is_closed: boolean;
+  // Canal paid real entre TODOS los contactos asociados (no solo el
+  // primero) — auditoría 20-jul, caso Stadler: `analytics_source` del
+  // deal es el origen del contacto con la actividad más antigua (regla de
+  // HubSpot), que puede tapar a un champion paid más reciente asociado al
+  // mismo deal. Null si ningún contacto asociado es PAID_SOCIAL/PAID_SEARCH.
+  paid_contact_channel: string | null;
+  paid_contact_id: string | null;
 };
 
 // Pipelines a incluir. Vacío = todos (sin filtro).
@@ -301,12 +308,17 @@ function dealPipelines(): string[] {
 }
 
 // Fetch asociaciones por batch (la Search API no las devuelve inline).
+// Devuelve TODOS los ids asociados por deal, no solo el primero — un deal
+// puede tener varios contactos (cuentas ABM/enterprise) y quedarse solo con
+// `r.to[0]` es lo que tapaba al champion paid en el caso Stadler (auditoría
+// 20-jul). Los llamantes deciden si necesitan uno (p. ej. compañía, 1:1) o
+// todos (contactos, para `resolvePaidContactChannel`).
 async function fetchDealAssociations(
   dealIds: string[],
   toType: "contacts" | "companies",
-): Promise<Map<string, string>> {
+): Promise<Map<string, string[]>> {
   const token = requireToken();
-  const result = new Map<string, string>();
+  const result = new Map<string, string[]>();
   for (let i = 0; i < dealIds.length; i += 100) {
     const batch = dealIds.slice(i, i + 100);
     let json: { results: { from: { id: string }; to: { id: string }[] }[] };
@@ -323,10 +335,29 @@ async function fetchDealAssociations(
       continue;
     }
     for (const r of json.results ?? []) {
-      if (r.to?.[0]?.id) result.set(r.from.id, r.to[0].id);
+      const ids = (r.to ?? []).map((t) => t.id).filter(Boolean);
+      if (ids.length > 0) result.set(r.from.id, ids);
     }
   }
   return result;
+}
+
+// Entre TODOS los contactos asociados a un deal, ¿hay alguno con canal
+// paid real? HubSpot calcula `hs_analytics_source` del deal a partir del
+// contacto con la actividad MÁS ANTIGUA — que en cuentas con varios
+// contactos puede no ser el champion (Stadler: un contacto OFFLINE de 2024
+// tapaba a la champion Paid Search de 2026). Se prioriza el primer
+// contacto paid encontrado si hubiera más de uno.
+function resolvePaidContactChannel(
+  contactIds: string[],
+  contactsById: Map<string, HsContact>,
+): { channel: "LinkedIn" | "Google"; contactId: string } | null {
+  for (const id of contactIds) {
+    const c = contactsById.get(id);
+    if (c?.analytics_source === "PAID_SOCIAL") return { channel: "LinkedIn", contactId: id };
+    if (c?.analytics_source === "PAID_SEARCH") return { channel: "Google", contactId: id };
+  }
+  return null;
 }
 
 export async function fetchDeals(): Promise<HsDeal[]> {
@@ -350,15 +381,24 @@ export async function fetchDeals(): Promise<HsDeal[]> {
     sorts: [{ propertyName: "createdate", direction: "ASCENDING" }],
   });
 
-  // Fetch asociaciones en batch
+  // Fetch asociaciones en batch. Compañía sigue siendo 1:1 (nos vale el
+  // primer id); contactos ahora se piden TODOS para poder detectar un
+  // champion paid oculto entre varios (ver `resolvePaidContactChannel`).
   const dealIds = records.map((r) => r.id);
   const [contactMap, companyMap] = await Promise.all([
     fetchDealAssociations(dealIds, "contacts"),
     fetchDealAssociations(dealIds, "companies"),
   ]);
 
+  const allContactIds = [...new Set([...contactMap.values()].flat())];
+  const contactsById = new Map(
+    (await batchReadContacts(allContactIds)).map((c) => [c.hubspot_contact_id, c]),
+  );
+
   return records.map((r) => {
     const p = r.properties;
+    const contactIds = contactMap.get(r.id) ?? [];
+    const paidContact = resolvePaidContactChannel(contactIds, contactsById);
     return {
       hubspot_deal_id: r.id,
       dealname: p.dealname,
@@ -369,12 +409,14 @@ export async function fetchDeals(): Promise<HsDeal[]> {
       dealstage: p.dealstage,
       pipeline: p.pipeline,
       analytics_source: p.hs_analytics_source,
-      hubspot_contact_id: contactMap.get(r.id) ?? null,
-      hubspot_company_id: companyMap.get(r.id) ?? null,
+      hubspot_contact_id: contactIds[0] ?? null,
+      hubspot_company_id: companyMap.get(r.id)?.[0] ?? null,
       createdate: p.createdate,
       closedate: p.closedate,
       is_closed_won: p.hs_is_closed_won === "true",
       is_closed: p.hs_is_closed === "true",
+      paid_contact_channel: paidContact?.channel ?? null,
+      paid_contact_id: paidContact?.contactId ?? null,
     };
   });
 }

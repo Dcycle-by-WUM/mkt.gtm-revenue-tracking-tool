@@ -7,6 +7,7 @@ import { fetchAll } from "@/lib/supabase/fetch-all";
 import {
   mockCampaigns,
   applyOverrides,
+  isPaidChannel,
   type CampaignRow,
   type Channel,
   type CountryOverrides,
@@ -36,11 +37,13 @@ function fromDbRow(r: DbKpiByCampaignMonth): CampaignRow {
 
 // `kpi_organic_by_month` (migración 0009) corre siempre, en paralelo a la
 // paid — no como fallback — para que los leads orgánicos no desaparezcan de
-// Overview en cuanto entra spend de LinkedIn/Google.
+// Overview en cuanto entra spend de LinkedIn/Google. Desde 0022 la vista
+// desglosa el canal (Organic / Email Marketing / Otros); ya no se aplasta
+// todo a "Otros".
 function fromOrganicDbRow(r: DbKpiOrganicByMonth): CampaignRow {
   return {
-    channel: "Otros",
-    campaign: "(orgánico)",
+    channel: r.channel,
+    campaign: `(${r.channel})`,
     campaignGroup: null,
     country: normalizeCountryLabel(r.country),
     month: r.month,
@@ -61,15 +64,19 @@ async function listOrganicRows(sb: SupabaseClient): Promise<CampaignRow[]> {
   return (data as DbKpiOrganicByMonth[]).map(fromOrganicDbRow);
 }
 
-// Mapea `hs_analytics_source` (que es la "original source" de HubSpot) al
-// canal interno. Sin esto la atribución solo iría a paid; pero queremos ver
-// MQLs/SQLs de orgánico también en Overview.
-function sourceToChannel(src: string | null): Channel | "Otros" {
-  if (!src) return "Otros";
-  const s = src.toUpperCase();
-  if (s.includes("PAID_SOCIAL")) return "LinkedIn";
-  if (s.includes("PAID_SEARCH")) return "Google";
-  return "Otros";
+// Mapea `hs_analytics_source` (la "original source" de HubSpot) al canal
+// interno — espejo de la función SQL `source_to_channel` (migración 0022).
+// Devuelve null para OFFLINE (se excluye: la plataforma solo trackea
+// inbound). Sin etiqueta ('') → "Otros" (no es Offline). Solo se usa en el
+// arranque en frío (sin vistas KPI todavía).
+function sourceToChannel(src: string | null): Channel | null {
+  const s = (src ?? "").trim().toUpperCase();
+  if (s === "PAID_SOCIAL") return "LinkedIn";
+  if (s === "PAID_SEARCH") return "Google";
+  if (s === "ORGANIC_SEARCH" || s === "DIRECT_TRAFFIC") return "Organic";
+  if (s === "EMAIL_MARKETING") return "Email Marketing";
+  if (s === "OFFLINE") return null;            // excluido
+  return "Otros";                              // other campaigns, AI, social, referrals, ''
 }
 
 // Cuando no hay paid en `ad_spend_daily`, derivamos los KPIs solo del CRM
@@ -105,12 +112,13 @@ async function listCRMOnlyMonthly(sb: SupabaseClient): Promise<CampaignRow[]> {
 
   for (const c of contacts) {
     if (!c.created_at_hs) continue;
-    const month = c.created_at_hs.slice(0, 7);
     const channel = sourceToChannel(c.analytics_source);
+    if (!channel) continue;                     // OFFLINE → no cuenta como lead
+    const month = c.created_at_hs.slice(0, 7);
     const country = normalizeCountryLabel(c.country_parsed || c.country_raw || "Sin país / Multi");
     const key = `${channel}|${month}|${country}`;
     const b = buckets.get(key) ?? {
-      channel: channel as Channel,
+      channel,
       campaign: `(sin paid) ${channel}`,
       campaignGroup: null,
       country,
@@ -200,7 +208,7 @@ async function collapseNonPaidCountries(rows: CampaignRow[]): Promise<CampaignRo
   const keep = new Set<string>(["Sin país / Multi"]);   // bucket propio
   const money = new Map<string, number>();
   for (const r of rows) {
-    if (r.channel !== "Otros") keep.add(r.country);
+    if (isPaidChannel(r.channel)) keep.add(r.country);
     money.set(r.country, (money.get(r.country) ?? 0) + r.pipeline + r.sql);
   }
   for (const [country, m] of money) if (m > 0) keep.add(country);

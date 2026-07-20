@@ -8,10 +8,17 @@ import { regionOf, type CountryGroups } from "./regions";
 
 export const IS_MOCK = true;
 
-// "Otros" cubre los buckets sin paid (orgánico, direct, AI referrals, offline)
-// que entran via `hs_analytics_source`. Cuando llegue Supermetrics y los
-// contactos vengan ya cruzados con campaña, este bucket residual se reduce.
-export type Channel = "LinkedIn" | "Google" | "Otros";
+// Canales de la plataforma (migración 0022). Paid: LinkedIn, Google.
+// No-paid inbound: Organic (organic search + direct traffic), Email
+// Marketing, y "Otros" residual (other campaigns, AI referrals, social
+// orgánico, referrals, sin etiqueta). OFFLINE NO es un canal: se excluye
+// en la vista (la plataforma solo trackea inbound).
+export type Channel = "LinkedIn" | "Google" | "Organic" | "Email Marketing" | "Otros";
+
+// Canales de pago (los únicos con spend). Sirve para separar paid vs
+// no-paid en Overview y en los helpers de país.
+export const PAID_CHANNELS: Channel[] = ["LinkedIn", "Google"];
+export const isPaidChannel = (c: string): boolean => c === "LinkedIn" || c === "Google";
 
 export type CampaignRow = ChannelMetrics & {
   channel: Channel;
@@ -24,7 +31,7 @@ export type CampaignRow = ChannelMetrics & {
 // Meses base — usados solo cuando no hay datos reales aún. La UI prefiere
 // derivar los meses del dataset real (ver `monthsOf` en lib/mock-data).
 export const MONTHS = ["2026-04", "2026-05", "2026-06"] as const;
-export const CHANNELS: Channel[] = ["LinkedIn", "Google", "Otros"];
+export const CHANNELS: Channel[] = ["LinkedIn", "Google", "Organic", "Email Marketing", "Otros"];
 export const NO_COUNTRY = "Sin país / Multi";
 
 /** Lista ordenada de meses presentes en un dataset (YYYY-MM ascendente). */
@@ -103,7 +110,7 @@ export const countriesOf = (rows: CampaignRow[]) => [...new Set(rows.map((r) => 
 // dropdown de país no debe listar todos los orígenes de leads orgánicos del
 // mundo — a esos se llega por región.
 export const paidCountriesOf = (rows: CampaignRow[]) =>
-  [...new Set(rows.filter((r) => r.channel !== "Otros").map((r) => r.country))].sort();
+  [...new Set(rows.filter((r) => isPaidChannel(r.channel)).map((r) => r.country))].sort();
 
 // ── Overrides de país (PRD §8.2) ──────────────────────────────
 // Mapa { campaña (o patrón) → país }. Se aplica encima de los datos vengan
