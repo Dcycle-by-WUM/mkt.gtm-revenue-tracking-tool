@@ -435,3 +435,39 @@ los contactos asociados a un deal (no solo `r.to?.[0]`) y, al elegir cuál
 atribuye canal, priorizar el que tenga `analytics_source` PAID_SOCIAL/
 PAID_SEARCH sobre uno más antiguo pero no-paid — mismo espíritu que 0020
 ya aplica (prioriza "contacto Inbound explícito" sobre "deal OFFLINE").
+
+### 5.5 Barrido completo — los 128 deals de 2026 (AE + International)
+
+Davide pidió extender el chequeo a **todo 2026**, no solo Spain/feb. Se
+repitió el método a escala con un atajo: los deals tienen una propiedad
+`num_associated_contacts` — un deal con **1 solo contacto** no puede tener
+"el contacto equivocado" guardado (es el único que hay), así que solo
+los deals con **2+ contactos** son candidatos al bug.
+
+De los 128 deals de AE (`7888791`) + International (`727373069`) creados
+en 2026: **66 tienen 2+ contactos**. De esos, 3 ya estaban bien
+etiquetados como paid y 7 ya se habían revisado en el §5.2 (Stadler
+corregido a mano por Davide tras esta auditoría). Los **56 restantes** se
+auditaron contacto a contacto — mismo método, sin escribir nada en
+HubSpot. Resultado: **3 mismatches más**, patrón idéntico a Stadler:
+
+| Deal (id) | € | Fuente propia del deal | Contacto paid oculto | Canal real |
+| --- | ---: | --- | --- | --- |
+| Familia Torres - Huella de Carbono (61228877682) | 30.000 | OFFLINE | Manuel Fernández Gámez | Paid Search |
+| Savills - ESG para clientes (61352544676) | 25.000 | OFFLINE | Sergio de Jaime Álvarez | Paid Social |
+| Productos Solubles PROSOL - HdC + EINF (54835487140) | 8.750 | OFFLINE | Ana Izquierdo | Paid Social |
+
+(Savills/Sergio de Jaime ya aparecía en el tracker de Davide del §3.6 sin
+canal asignado — cuadra con el hallazgo.)
+
+**63.750 € más** de pipeline mal atribuido — los otros 52 de los 56 son
+Otros genuino, sin contacto paid escondido. Sumado a Stadler: **91.250 €**
+confirmados con el patrón "contacto paid oculto entre varios asociados"
+en todo 2026. Pendientes de corregir a mano en HubSpot (marcar el
+contacto paid como primario / revisar asociaciones), igual que Stadler,
+hasta que se decida el fix estructural del §5.4.
+
+**Higiene aparte**: `[TEST] — Pricing Calculator Q2 2026` (60027752489,
+31.300 €, OFFLINE, AE Pipeline) es un deal de prueba en producción —
+mismo problema que "[TEST] E2E — Snoc" en §3.4. No tiene contacto paid
+oculto, pero infla el pipeline igual; se recomienda borrarlo del portal.
