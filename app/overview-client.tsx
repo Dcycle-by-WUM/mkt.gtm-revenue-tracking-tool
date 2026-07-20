@@ -10,6 +10,7 @@ import {
   monthsOf,
   sumMetrics,
   emptyFilters,
+  isPaidChannel,
   type CampaignRow,
 } from "@/lib/mock-data";
 import type { CountryGroups } from "@/lib/regions";
@@ -33,8 +34,14 @@ export function OverviewClient({
   const monthlyRows = filterCampaigns(initial, { ...filters, month: "" }, groups);
   const linkedinRows = monthlyRows.filter((r) => r.channel === "LinkedIn");
   const googleRows = monthlyRows.filter((r) => r.channel === "Google");
-  const paidRows = monthlyRows.filter((r) => r.channel !== "Otros");
-  const organicRows = monthlyRows.filter((r) => r.channel === "Otros");
+  const paidRows = monthlyRows.filter((r) => isPaidChannel(r.channel));
+  const nonPaidRows = monthlyRows.filter((r) => !isPaidChannel(r.channel));
+  // Canales no-paid presentes (Organic / Email Marketing / Otros), en orden
+  // fijo, cada uno con su tabla de funnel mensual.
+  const NON_PAID_ORDER = ["Organic", "Email Marketing", "Otros"] as const;
+  const nonPaidByChannel = NON_PAID_ORDER
+    .map((ch) => ({ channel: ch, rows: nonPaidRows.filter((r) => r.channel === ch) }))
+    .filter((g) => g.rows.length > 0);
 
   const cards = [
     { label: "Spend", value: fmtEur(t.spend) },
@@ -90,13 +97,28 @@ export function OverviewClient({
           ]}
         />
       )}
-      <MonthlyFunnelTable title="Orgánico (demo requests)" rows={organicRows} />
-      {paidRows.length > 0 && organicRows.length > 0 && (
+      {nonPaidByChannel.map((g) => (
+        <MonthlyFunnelTable
+          key={g.channel}
+          title={g.channel === "Otros" ? "Otros (no-paid)" : g.channel}
+          rows={g.rows}
+        />
+      ))}
+      {nonPaidByChannel.length > 0 && (
+        <ChannelTotalsTable
+          title="No-paid Total"
+          channelRows={nonPaidByChannel.map((g) => ({
+            label: g.channel,
+            metrics: sumMetrics(g.rows),
+          }))}
+        />
+      )}
+      {paidRows.length > 0 && nonPaidRows.length > 0 && (
         <ChannelTotalsTable
           title={`Total ${scopeLabel}`}
           channelRows={[
             { label: "Paid Media", metrics: sumMetrics(paidRows) },
-            { label: "Orgánico", metrics: sumMetrics(organicRows) },
+            { label: "No-paid (inbound)", metrics: sumMetrics(nonPaidRows) },
           ]}
         />
       )}

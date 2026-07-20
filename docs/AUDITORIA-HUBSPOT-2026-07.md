@@ -510,3 +510,62 @@ Una vez aplicado, Stadler + Familia Torres + Savills + PROSOL (91.250 €)
 deberían salir de Otros automáticamente, sin tocar nada más en HubSpot —
 y cualquier deal futuro con el mismo patrón (contacto paid tapado por
 uno más antiguo no-paid) se resuelve solo, sin auditoría manual.
+
+## 6. Nueva taxonomía de canal + exclusión de OFFLINE — 20-jul
+
+Davide, tras el §5: "Otros" era un cajón de sastre inútil (mezclaba
+orgánico, direct, email, offline, referrals, AI…). Decisión: desglosarlo
+y, sobre todo, **sacar OFFLINE de la plataforma — la plataforma solo
+trackea inbound**. Mapa nuevo Original Traffic Source → canal:
+
+| Original Traffic Source (HubSpot) | Canal en la plataforma |
+| --- | --- |
+| Paid Social | LinkedIn |
+| Paid Search | Google |
+| Organic Search | **Organic** |
+| Direct Traffic | **Organic** (decisión Davide) |
+| Email Marketing | **Email Marketing** |
+| Other Campaigns | Otros |
+| AI Referrals | Otros |
+| Organic Social / Referrals | Otros (Davide: "never used") |
+| (sin etiqueta) | Otros (≠ Offline) |
+| **Offline Sources** | **EXCLUIDO** |
+
+**El matiz clave (OFFLINE vs decisión #14)**: "excluir OFFLINE" no puede
+significar "tirar todo deal con fuente OFFLINE" — eso borraría Stadler,
+que es OFFLINE a nivel de deal pero que Davide quiere ver como Paid
+Search vía su champion. La exclusión es por **canal resuelto**, no por la
+fuente cruda:
+
+```
+canal del deal = primer no-nulo de:
+  1. paid_contact_channel            (0021: cualquier contacto asociado paid)
+  2. source_to_channel(fuente del deal)     (null si OFFLINE)
+  3. source_to_channel(fuente del contacto) (null si OFFLINE)
+Si el resultado es NULL → deal EXCLUIDO.
+```
+
+Así: Stadler + los 3 del §5.5 entran (vía contacto paid); un deal OFFLINE
+cuyo contacto es Organic/Email entra como Organic/Email; solo desaparecen
+los deals OFFLINE de arriba a abajo (deal OFFLINE + contacto OFFLINE/sin
+contacto). Esto **estrecha la decisión #14**: antes un deal OFFLINE con
+`lead_source=Inbound` pero sin canal real se quedaba en Otros; ahora se
+va. (Si Davide prefiere excluir TODO deal OFFLINE incluso con contacto de
+canal real, es un cambio de una línea — pendiente de confirmar; hoy se
+mantiene por ser la única lectura coherente con querer Stadler.)
+
+Mismo criterio para **leads**: un contacto con Original Traffic Source =
+OFFLINE deja de contar como lead. La vista de no-paid
+(`kpi_organic_by_month`) pasa a desglosar `channel` (Organic / Email
+Marketing / Otros) en vez de aplastar todo a "Otros".
+
+**Implementado**: migración
+`0022_channel_taxonomy_exclude_offline.sql` (función SQL
+`source_to_channel` + `deal_attribution` + las 3 vistas KPI reescritas) y
+código (`Channel` de 3→5 valores en `lib/mock-data.ts` +
+`lib/supabase/types.ts`; Overview separa paid vs no-paid y muestra una
+tabla por canal no-paid; helpers de país usan `isPaidChannel`).
+`npm run typecheck` y `npm run build` pasan limpio. **No verificado
+contra producción** (sin acceso a `cwcvurrkqwifpngzecxu` desde esta
+sesión). Falta aplicar 0021 **y** 0022 en producción + desplegar el
+código; efecto tras el siguiente `sync-crm`.
