@@ -604,3 +604,35 @@ contacto posterior, no se detecta). typecheck/build OK.
 Stadler para que surta efecto sin esperar al sync —
 `update deals set paid_contact_channel=null, paid_contact_id=null where
 hubspot_deal_id='56289624738'; select refresh_kpi_views();`
+
+## 8. Endurecimiento del sync-crm — 20-jul
+
+El sync manual se quedaba sin tiempo (log Netlify: `Duration: 60000 ms`),
+sin llegar al paso de deals ni a `refresh_kpi_views`. Causa: el primer
+paso traía **~10.000 compañías** (tope del search API) desde el cutoff,
+provocando una tormenta de `429 rate limit` que consumía ~56s solo en
+compañías. Cambios (`lib/hubspot.ts` + `netlify/functions/sync-crm.ts`):
+
+1. **Compañías solo las asociadas a deals** (`fetchDealLinkedCompanies`,
+   batch-read por id) en vez de las ~10k del cutoff. `accounts` solo se usa
+   para el fallback de país del deal (y ABM, on hold). De paso trae la
+   compañía aunque se creara antes del cutoff (el fetch masivo se la
+   saltaba). `fetchCompanies` se conserva para un backfill puntual de ABM.
+2. **Orden nuevo**: contacts → deals → companies(asociadas) →
+   deals_linked_contacts → **refresh_kpi_views** → engagements. El refresh
+   pasa ANTES de engagements: las vistas KPI dependen de
+   contacts/deals/accounts, no de `activities`, así que un engagements lento
+   ya no deja las vistas sin refrescar.
+3. **Engagements gated por `ABM_ENABLED`** (igual que compute-heat,
+   DECISIONES #11): es el paso más pesado y solo alimenta el timeline ABM
+   (on hold). Omitido en el sync horario hasta reactivar ABM.
+4. **Reintentos más robustos**: `hsRetry` respeta el header `Retry-After`
+   de HubSpot, reintenta también 5xx transitorios (6 intentos, jitter) y
+   se añade pacing de 120ms entre páginas para no disparar el rate limit
+   de entrada.
+
+Resultado esperado: el sync horario queda en contacts + deals + compañías
+asociadas + contactos de deals + refresh — todo acotado y pequeño, dentro
+del presupuesto de tiempo. Con ABM apagado no toca engagements. typecheck
+y build verificados; falta validar el `Duration` real en el próximo run de
+Netlify.
