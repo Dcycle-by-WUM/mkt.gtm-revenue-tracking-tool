@@ -342,20 +342,35 @@ async function fetchDealAssociations(
   return result;
 }
 
+// Un contacto solo puede ser el ORIGEN de un deal si existía ANTES de que
+// el deal se creara (regla de negocio Davide, 20-jul — es la lógica final
+// del tool). Un contacto creado después del deal no lo generó; es un
+// stakeholder añadido más tarde y no debe definir el canal. Compara
+// timestamps ISO-8601 UTC (orden lexicográfico = orden temporal). Si falta
+// cualquiera de las dos fechas, no se puede validar → no cuenta.
+function contactPredatesDeal(contactCreatedAt: string | null, dealCreatedAt: string | null): boolean {
+  if (!contactCreatedAt || !dealCreatedAt) return false;
+  return contactCreatedAt < dealCreatedAt;
+}
+
 // Entre TODOS los contactos asociados a un deal, ¿hay alguno con canal
-// paid real? HubSpot calcula `hs_analytics_source` del deal a partir del
-// contacto con la actividad MÁS ANTIGUA — que en cuentas con varios
-// contactos puede no ser el champion (Stadler: un contacto OFFLINE de 2024
-// tapaba a la champion Paid Search de 2026). Se prioriza el primer
-// contacto paid encontrado si hubiera más de uno.
+// paid real Y creado antes que el deal? HubSpot calcula `hs_analytics_source`
+// del deal a partir del contacto con la actividad MÁS ANTIGUA — que en
+// cuentas con varios contactos puede no ser el champion. Se prioriza el
+// primer contacto paid que además predate el deal (ver `contactPredatesDeal`:
+// p. ej. Stadler queda fuera porque su champion Paid Search se creó el día
+// DESPUÉS de que sales creara el deal a mano).
 function resolvePaidContactChannel(
   contactIds: string[],
   contactsById: Map<string, HsContact>,
+  dealCreatedAt: string | null,
 ): { channel: "LinkedIn" | "Google"; contactId: string } | null {
   for (const id of contactIds) {
     const c = contactsById.get(id);
-    if (c?.analytics_source === "PAID_SOCIAL") return { channel: "LinkedIn", contactId: id };
-    if (c?.analytics_source === "PAID_SEARCH") return { channel: "Google", contactId: id };
+    if (!c) continue;
+    if (!contactPredatesDeal(c.created_at_hs, dealCreatedAt)) continue;
+    if (c.analytics_source === "PAID_SOCIAL") return { channel: "LinkedIn", contactId: id };
+    if (c.analytics_source === "PAID_SEARCH") return { channel: "Google", contactId: id };
   }
   return null;
 }
@@ -398,7 +413,7 @@ export async function fetchDeals(): Promise<HsDeal[]> {
   return records.map((r) => {
     const p = r.properties;
     const contactIds = contactMap.get(r.id) ?? [];
-    const paidContact = resolvePaidContactChannel(contactIds, contactsById);
+    const paidContact = resolvePaidContactChannel(contactIds, contactsById, p.createdate);
     return {
       hubspot_deal_id: r.id,
       dealname: p.dealname,

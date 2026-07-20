@@ -569,3 +569,38 @@ tabla por canal no-paid; helpers de país usan `isPaidChannel`).
 contra producción** (sin acceso a `cwcvurrkqwifpngzecxu` desde esta
 sesión). Falta aplicar 0021 **y** 0022 en producción + desplegar el
 código; efecto tras el siguiente `sync-crm`.
+
+## 7. Regla final: el contacto de atribución debe predatar el deal — 20-jul
+
+Davide, tras validar los 4 rescates: **"es clave que el contacto asociado
+como inbound al deal se haya creado ANTES de que el deal existiera"**. Un
+contacto creado después del deal no pudo originarlo. Es la lógica final
+del tool y se aplica a TODOS los deals.
+
+Verificado en vivo — fechas de creación de cada deal vs. su contacto paid:
+
+| Deal | Deal creado | Contacto paid | Contacto creado | ¿Anterior? |
+| --- | --- | --- | --- | --- |
+| **Stadler Rail AG - CSRD** | 2026-02-16 | Nadya Segui (Paid Search) | 2026-02-17 | ❌ **+1 día después** |
+| Familia Torres | 2026-06-18 | Manuel Fernández Gámez (Paid Search) | 2026-06-04 | ✅ 2 sem antes |
+| Savills | 2026-06-23 | Sergio de Jaime (Paid Social) | 2026-06-10 | ✅ ~2 sem antes |
+| PROSOL | 2026-01-28 | Ana Izquierdo (Paid Social) | 2025-11-03 | ✅ ~3 meses antes |
+
+**El propio Stadler queda FUERA**: su champion Paid Search (Nadya) se creó
+el día DESPUÉS de que sales creara el deal a mano (OFFLINE). Su único
+contacto anterior al deal es Lino Mesa (OFFLINE, 2024). Por tanto Stadler
+no tiene contacto inbound anterior → se excluye (era, en realidad, un deal
+creado por sales con un toque paid posterior, no pipeline generado por
+paid). Familia Torres, Savills y PROSOL se mantienen.
+
+**Implementado**: `lib/hubspot.ts` (`contactPredatesDeal`) filtra
+`paid_contact_channel` a contactos anteriores al deal; migración
+`0023_contact_must_predate_deal.sql` añade el mismo gate al fallback por
+contacto único de la vista (`ct.created_at_hs < d.createdate`). No se toca
+la fuente propia del deal (limitación conocida: si HubSpot la derivó de un
+contacto posterior, no se detecta). typecheck/build OK.
+
+**Para producción** (además de aplicar 0023): deshacer el parche manual de
+Stadler para que surta efecto sin esperar al sync —
+`update deals set paid_contact_channel=null, paid_contact_id=null where
+hubspot_deal_id='56289624738'; select refresh_kpi_views();`
