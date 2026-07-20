@@ -87,8 +87,29 @@ export const totals = sumMetrics;
 // `region` se resuelve contra el mapa país→grupo (lib/regions.ts) cuando el
 // filtro recibe `groups`; sin mapa se ignora, así las pantallas que aún no
 // pasan regiones siguen funcionando igual.
-export type Filters = { country: string; month: string; channel: string; region: string };
-export const emptyFilters: Filters = { country: "", month: "", channel: "", region: "" };
+// `month` es un filtro puntual (un mes exacto); `monthFrom`/`monthTo` acotan
+// un RANGO [desde, hasta] inclusivo — sirve para quitar años que no
+// interesan y para fijar la ventana de comparación. Se pueden combinar.
+export type Filters = {
+  country: string; month: string; channel: string; region: string;
+  monthFrom: string; monthTo: string;
+};
+export const emptyFilters: Filters = {
+  country: "", month: "", channel: "", region: "", monthFrom: "", monthTo: "",
+};
+
+// Primer mes del año en curso (YYYY-01). Default útil para arrancar las
+// pantallas de comparación sin la cola de años viejos con 1-2 leads.
+export function currentYearStart(): string {
+  return `${new Date().getFullYear()}-01`;
+}
+
+// ¿Cae `month` (YYYY-MM) dentro del rango del filtro? Comparación lexicográfica
+// (los YYYY-MM ordenan como el tiempo). Exportado para las pantallas que
+// filtran a mano (deals, forecast) y no pasan por `filterCampaigns`.
+export function inMonthRange(month: string, f: Pick<Filters, "monthFrom" | "monthTo">): boolean {
+  return (!f.monthFrom || month >= f.monthFrom) && (!f.monthTo || month <= f.monthTo);
+}
 
 export function filterCampaigns(
   rows: CampaignRow[],
@@ -100,6 +121,7 @@ export function filterCampaigns(
       (!f.region || !groups || regionOf(r.country, groups) === f.region) &&
       (!f.country || r.country === f.country) &&
       (!f.month || r.month === f.month) &&
+      inMonthRange(r.month, f) &&
       (!f.channel || r.channel === f.channel),
   );
 }
@@ -137,6 +159,49 @@ export function groupBy(rows: CampaignRow[], dim: Dimension): [string, ChannelMe
     map.set(key, acc);
   }
   return [...map.entries()].sort((a, b) => b[1].spend - a[1].spend);
+}
+
+// ── Matriz de comparación (dimensión × mes) ────────────────────
+// Una sola métrica en cada celda, meses como columnas y una dimensión
+// (país / canal / campaña) como filas, con totales de fila y columna. Es
+// lo que hace falta para comparar de un vistazo (p. ej. Pipeline € por país
+// y mes) — el pivot anidado no sirve para eso.
+export type MetricKey = "spend" | "leads" | "mql" | "sql" | "pipeline" | "closedWon";
+export const METRIC_LABELS: Record<MetricKey, string> = {
+  spend: "Spend", leads: "Leads", mql: "MQL", sql: "SQL",
+  pipeline: "Pipeline €", closedWon: "Closed Won",
+};
+export const METRIC_IS_EUR: Record<MetricKey, boolean> = {
+  spend: true, leads: false, mql: false, sql: false, pipeline: true, closedWon: true,
+};
+
+export type MonthMatrix = {
+  months: string[];
+  rows: { key: string; cells: number[]; total: number }[];
+  colTotals: number[];
+  grandTotal: number;
+};
+
+export function buildMonthMatrix(
+  rows: CampaignRow[],
+  rowDim: Dimension,
+  metric: MetricKey,
+): MonthMatrix {
+  const months = [...new Set(rows.map((r) => r.month))].sort();
+  const monthIdx = new Map(months.map((m, i) => [m, i]));
+  const byKey = new Map<string, number[]>();
+  for (const r of rows) {
+    const key = String(r[rowDim]);
+    let arr = byKey.get(key);
+    if (!arr) { arr = new Array(months.length).fill(0); byKey.set(key, arr); }
+    arr[monthIdx.get(r.month)!] += Number(r[metric] ?? 0);
+  }
+  const built = [...byKey.entries()]
+    .map(([key, cells]) => ({ key, cells, total: cells.reduce((a, b) => a + b, 0) }))
+    .sort((a, b) => b.total - a.total);
+  const colTotals = months.map((_, i) => built.reduce((a, r) => a + r.cells[i], 0));
+  const grandTotal = colTotals.reduce((a, b) => a + b, 0);
+  return { months, rows: built, colTotals, grandTotal };
 }
 
 // Pivot multi-dimensión: agrupa por la combinación ordenada de dimensiones.

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { FilterBar } from "@/components/FilterBar";
 import {
-  forecastActuals,
+  forecastActuals, inMonthRange,
   emptyFilters, MONTHS, CHANNELS,
   type ForecastRow, type Channel, type CampaignRow,
 } from "@/lib/mock-data";
@@ -48,6 +48,7 @@ export function ForecastClient({
     .filter(({ r }) =>
       (!filters.country || r.country === filters.country) &&
       (!filters.month || r.month === filters.month) &&
+      inMonthRange(r.month, filters) &&
       (!filters.channel || r.channel === filters.channel),
     );
 

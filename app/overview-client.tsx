@@ -10,8 +10,10 @@ import {
   monthsOf,
   sumMetrics,
   emptyFilters,
+  currentYearStart,
   isPaidChannel,
   type CampaignRow,
+  type Filters,
 } from "@/lib/mock-data";
 import type { CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtNum, fmtPct, roi, mqlRate, sqlRate } from "@/lib/kpis";
@@ -23,7 +25,9 @@ export function OverviewClient({
   initial: CampaignRow[];
   groups: CountryGroups;
 }) {
-  const [filters, setFilters] = useState(emptyFilters);
+  // Arranca en el año en curso: la Overview ya no muestra la cola de años
+  // viejos con 1-2 leads. Ajustable con el rango Desde/Hasta.
+  const [filters, setFilters] = useState<Filters>(() => ({ ...emptyFilters, monthFrom: currentYearStart() }));
   const rows = filterCampaigns(initial, filters, groups);
   const t = sumMetrics(rows);
   const months = monthsOf(initial);

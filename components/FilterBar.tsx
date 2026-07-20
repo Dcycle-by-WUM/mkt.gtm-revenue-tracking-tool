@@ -35,7 +35,11 @@ export function FilterBar({
       ? countries.filter((c) => regionOf(c, groups) === filters.region)
       : countries;
 
-  const hasFilters = filters.country || filters.month || filters.channel || filters.region;
+  const hasFilters = filters.country || filters.month || filters.channel ||
+    filters.region || filters.monthFrom || filters.monthTo;
+
+  const clearAll = () =>
+    setFilters({ country: "", month: "", channel: "", region: "", monthFrom: "", monthTo: "" });
 
   return (
     <div className="mb-6 space-y-3">
@@ -65,12 +69,22 @@ export function FilterBar({
           ))}
         </select>
 
-        <select className="control" value={filters.month} onChange={(e) => setFilters({ ...filters, month: e.target.value })}>
-          <option value="">Todos los meses</option>
-          {monthOpts.map((m) => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-[var(--muted)]">Desde</span>
+          <select className="control" value={filters.monthFrom} onChange={(e) => setFilters({ ...filters, monthFrom: e.target.value })}>
+            <option value="">inicio</option>
+            {monthOpts.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+          <span className="text-xs text-[var(--muted)]">hasta</span>
+          <select className="control" value={filters.monthTo} onChange={(e) => setFilters({ ...filters, monthTo: e.target.value })}>
+            <option value="">hoy</option>
+            {monthOpts.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
 
         {showChannel && (
           <select className="control" value={filters.channel} onChange={(e) => setFilters({ ...filters, channel: e.target.value })}>
@@ -83,7 +97,7 @@ export function FilterBar({
 
         {hasFilters && (
           <button
-            onClick={() => setFilters({ country: "", month: "", channel: "", region: "" })}
+            onClick={clearAll}
             className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] hover:bg-[var(--subtle)]"
           >
             Limpiar
