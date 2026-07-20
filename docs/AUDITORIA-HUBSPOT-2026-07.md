@@ -636,3 +636,40 @@ asociadas + contactos de deals + refresh — todo acotado y pequeño, dentro
 del presupuesto de tiempo. Con ABM apagado no toca engagements. typecheck
 y build verificados; falta validar el `Duration` real en el próximo run de
 Netlify.
+
+## 9. Reconciliación Spain + LinkedIn ene–may 2026 (tracker 89.445 €) — 20-jul
+
+Davide: "en mi Excel los deals de Spain de LinkedIn Ads suman ~89.445 €
+entre enero y mayo 2026; en la herramienta ni de cerca". Reconciliado deal
+a deal contra HubSpot en vivo. En el tracker, "LinkedIn Ads" = Original
+Traffic Source **Paid Social**; el importe cuelga del mes del CONTACTO.
+
+| Deal | Tracker € | Herramienta | Causa |
+| --- | ---: | --- | --- |
+| Martinrea | 10.000 | ✅ Spain + LinkedIn | fuente del deal = Paid Social |
+| Gestión Tributaria (GTT) | 11.200 ×2 | Spain + **Organic** (una vez) | fuente del deal Organic; contactos asociados Organic/Offline (Isabel/Rosa Paid Social **no asociadas**). El tracker lo cuenta 2 veces |
+| SOCOTEC | 11.200 | (antes excluido) → **Spain + Otros** con la #18 | deal OFFLINE; champion Felipe (Paid Social) **no asociado**; el asociado es Sergio (OFFLINE pero **Inbound**) |
+| Grupo Ubesol | 19.295 | ❌ Excluido | deal OFFLINE; champion Verónica (Paid Social) **no asociada**; el asociado es Carolina (Offline **Outbound**) |
+| RONAL Wheels | 26.550 | ❌ Fuera de scope | deal en **pipeline DACH**, no AE (decisión #12) |
+
+Verificado en vivo: Felipe Barrena Wright (SOCOTEC) existe como PAID_SOCIAL
++ Inbound (creado 13-ene-2026) pero **no está asociado al deal**; Verónica
+Julián Durán (Ubesol) igual (PAID_SOCIAL + Inbound, 2-mar-2026, no
+asociada). Los deals están enganchados a contactos viejos Offline/Outbound.
+
+**Las 3 causas del hueco (ninguna es error de cálculo del tool):**
+1. **Asociaciones en HubSpot (30.495 €)**: los champions de LinkedIn no
+   están asociados a sus deals → el tool no puede ver el canal. Arreglar en
+   HubSpot (asociar a Felipe/Verónica) los pone en Spain+LinkedIn solos.
+2. **RONAL en pipeline DACH (26.550 €)**: fuera de scope. Mover a AE o
+   decidir si DACH-con-contacto-español cuenta como Spain.
+3. **Doble conteo del Excel (11.200 €)**: GTT aparece 2 veces.
+
+El país NO es la causa aquí: los deals de AE cogen ES del pipeline; GTT
+sale como ES+Organic. (La hipótesis "Sin país" de Davide sí aplica a
+LEADS no-paid sin país de contacto y a International no-paid — pendiente de
+enriquecer país desde empresa/dominio.)
+
+**Aplicado**: migración 0024 (decisión #18) — SOCOTEC pasa de excluido a
+Spain+Otros porque Sergio es Inbound explícito. Ubesol y RONAL siguen
+necesitando arreglo en HubSpot.
