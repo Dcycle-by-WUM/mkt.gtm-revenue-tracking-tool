@@ -117,6 +117,11 @@ export type DbDeal = {
   closedate: string | null;
   is_closed_won: boolean | null;             // flags de HubSpot (0017); null hasta el primer sync tras la migración
   is_closed: boolean | null;
+  // Señal de canal paid entre TODOS los contactos asociados al deal, no
+  // solo el primero (migración 0021 — caso Stadler). Null si ninguno de
+  // los contactos asociados es PAID_SOCIAL/PAID_SEARCH.
+  paid_contact_channel: string | null;       // 'LinkedIn' | 'Google' | null
+  paid_contact_id: string | null;            // qué contacto lo justifica
   synced_at: string;
 };
 

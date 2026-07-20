@@ -471,3 +471,42 @@ hasta que se decida el fix estructural del §5.4.
 31.300 €, OFFLINE, AE Pipeline) es un deal de prueba en producción —
 mismo problema que "[TEST] E2E — Snoc" en §3.4. No tiene contacto paid
 oculto, pero infla el pipeline igual; se recomienda borrarlo del portal.
+
+### 5.6 Por qué "marcar a Nadya como primary contact" no basta — y qué se implementó
+
+Davide intentó corregir Stadler a mano en HubSpot. Se volvió a comprobar
+en vivo tras el intento: `hs_analytics_source` del deal seguía **OFFLINE**
+y los 3 contactos seguían igual (mismo `lastmodifieddate`). Causa: ese
+campo es un **rollup que calcula HubSpot** ("origen del contacto con la
+actividad más antigua para este deal") — no mira si un contacto está
+marcado "primary", así que esa acción no lo cambia. La app tampoco tiene
+un override propio para canal (sí existe uno para país,
+`country_overrides`, editable en Admin/Explorer) — hasta ahora HubSpot
+era el único sitio donde tocar esto, y no de forma fiable.
+
+**Implementado (este audit, 20-jul)**: migración
+`0021_paid_contact_channel_any_associated.sql` + cambios en
+`lib/hubspot.ts`. La ingesta ahora trae **todos** los contactos asociados
+a cada deal (antes solo el primero que devolvía la API de HubSpot) y, si
+cualquiera de ellos es `PAID_SOCIAL`/`PAID_SEARCH`, esa señal
+(`deals.paid_contact_channel`) gana sobre el rollup de HubSpot y sobre el
+fallback de un solo contacto de la migración 0020. Es un cambio
+monótono: solo puede mover un deal DE Otros HACIA su canal paid real
+cuando hay un contacto genuinamente paid asociado — nunca al revés, y
+nunca quita atribución que ya fuera correcta.
+
+Verificado: `npm run typecheck` y `npm run build` pasan limpio con el
+cambio. **No verificado contra la base de producción** (esta sesión no
+tiene acceso al proyecto Supabase `cwcvurrkqwifpngzecxu`, solo a 2
+proyectos personales inactivos vía MCP) — falta:
+1. Aplicar `supabase/migrations/0021_paid_contact_channel_any_associated.sql`
+   contra producción (SQL editor de Supabase o `supabase db push`; no hay
+   auto-deploy de migraciones en este repo).
+2. Desplegar el cambio de `lib/hubspot.ts` (merge a main → deploy de
+   Netlify).
+3. Esperar al siguiente `sync-crm` (horario) o dispararlo a mano.
+
+Una vez aplicado, Stadler + Familia Torres + Savills + PROSOL (91.250 €)
+deberían salir de Otros automáticamente, sin tocar nada más en HubSpot —
+y cualquier deal futuro con el mismo patrón (contacto paid tapado por
+uno más antiguo no-paid) se resuelve solo, sin auditoría manual.
