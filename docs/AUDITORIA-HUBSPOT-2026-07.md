@@ -314,3 +314,124 @@ aclaración de Davide).
    el caso "contacto DE en International Pipeline" (Exyte) se ve como DACH
    ahí (en /deals ya sale como Rest of International vía `business_region`).
    Si molesta, la siguiente iteración propaga `business_region` a las KPI.
+4. Precedencia de contacto en deals con **varios contactos asociados** de
+   canal distinto (ver §5, caso Stadler) — hoy la ingesta solo guarda 1
+   contacto por deal y puede quedarse con el que no es el champion.
+
+---
+
+## 5. Canal «Otros» en Spain, feb-2026 — auditoría 20-jul
+
+Pregunta de Davide: por qué "Otros" muestra un pipeline muy grande en
+Spain en febrero 2026, con el caso concreto de **Stadler Rail AG - CSRD**
+(sale como Otros cuando su champion, Nadya Segui, tiene Original Traffic
+Source = Paid Search).
+
+**Método**: igual que el §1 — se descargaron en vivo de la API de HubSpot
+los **12 deals de AE Pipeline (`7888791` → Spain) creados en feb-2026**
+(201.500 € en total), con el Original Traffic Source propio del deal Y
+de **todos** sus contactos asociados (no solo el que guarda hoy la
+plataforma). Ningún número de esta sección es estimado.
+
+### 5.1 El caso Stadler, confirmado
+
+Deal **Stadler Rail AG - CSRD** (56289624738) — 27.500 €, creado
+16-feb-2026, Closed Lost, creado a mano en HubSpot (`CRM_UI`).
+`hs_analytics_source` del deal = **OFFLINE**. Tiene **3 contactos
+asociados**, no uno:
+
+| Contacto | Rol | Creado | Original Traffic Source |
+| --- | --- | --- | --- |
+| Lino Mesa | HSE Manager | ago-2024 | OFFLINE |
+| **Nadya Segui** | Técnica de Medioambiente (**champion**) | 17-feb-2026 | **Paid Search** |
+| Blanca Gozálvez Rasero | Responsable de Medioambiente | 17-feb-2026 | Other Campaigns |
+
+Nadya tiene razón: su Original Traffic Source es Paid Search. Dos causas
+combinadas hacen que la plataforma no lo vea así:
+
+1. **HubSpot ya "pierde" la señal al nivel del deal.** El campo
+   `hs_analytics_source` de un deal se define (texto oficial de HubSpot)
+   como *"original source for the contact with the earliest activity for
+   this deal"* — coge el origen del contacto más **antiguo** asociado
+   (Lino, 2024), no el del champion real ni el del contacto que originó
+   la oportunidad de CSRD. Esto es comportamiento nativo de HubSpot, no
+   de la plataforma.
+2. **La plataforma solo guarda 1 contacto por deal.** `fetchDealAssociations`
+   (`lib/hubspot.ts`) coge el primer contacto que devuelve la API de
+   asociaciones de HubSpot (`r.to?.[0]?.id`) como único `hubspot_contact_id`
+   del deal en Supabase. El fallback de la migración 0020 ("deal OFFLINE →
+   mira el canal del contacto") depende de cuál contacto quedó guardado —
+   con 3 contactos reales de canal distinto, puede acertar o fallar según
+   el orden en que la API los devuelve. Aquí no acertó con Nadya.
+
+El fallback de 0020 se diseñó pensando en 1 contacto por deal; en deals
+multi-contacto (cuentas grandes / ABM, como Stadler) el resultado depende
+de qué contacto ganó la carrera al guardar, no de cuál es el champion.
+
+### 5.2 ¿Es un problema generalizado? Solo 1 de 12 deals
+
+Se auditaron los 12 deals de Spain/feb-2026 (201.500 €) y **todos** sus
+contactos asociados, buscando algún canal paid escondido en cada uno:
+
+| Deal (id) | € | Estado | Fuente propia del deal | Contactos asociados (fuente) | ¿Champion paid oculto? |
+| --- | ---: | --- | --- | --- | --- |
+| Grifols S.A. (56162786407) | 56.000 | Abierto | OFFLINE | Darío Estrada (OFFLINE, lead feb-2024) | No |
+| Lopesan (57030587652) | 33.000 | Cerrado perdido | OFFLINE | 3 contactos, todos OFFLINE | No |
+| **Stadler Rail AG - CSRD** (56289624738) | 27.500 | Cerrado perdido | OFFLINE | Nadya (**Paid Search**), Blanca (Other Campaigns), Lino (OFFLINE) | **SÍ** |
+| HIP (56162789932) | 25.000 | Abierto | OFFLINE | Francesc Esteve (OFFLINE, lead ene-2024) | No |
+| Cox - Huella de Carbono (55759063730) | 15.000 | Cerrado perdido | Organic Search | Andrea (Organic Search), Elena (OFFLINE) | No |
+| Cooperativa AIRA (56829278835) | 12.000 | Cerrado perdido | OFFLINE | Lupe Garcia (OFFLINE) | No |
+| ABB Robotics Iberica (56127371161) | 8.000 | Cerrado ganado | OFFLINE | Laurent Menard (OFFLINE) | No |
+| Talleres Mecánicos del Sur (56831853326) | 7.000 | Cerrado ganado | OFFLINE | Mario (Email Marketing), Ángeles (OFFLINE/Outbound) | No |
+| GrupoNogar (55389459755) | 7.000 | Cerrado perdido | Organic Search | David (Organic Search), Jacobo (Other Campaigns) | No |
+| Raventós Codorníu (55927481727) | 6.000 | Cerrado perdido | OFFLINE | Daniel García (OFFLINE, lead abr-2024) | No |
+| Micropep (55688205187) | 2.500 | Cerrado ganado | OFFLINE | 3 contactos, todos OFFLINE | No |
+| Verley Food - Ampliación (55688206373) | 2.500 | Cerrado ganado | Direct Traffic | Thibaut (Direct Traffic), Romain (OFFLINE) | No |
+
+**11 de 12 deals (174.000 € de los 201.500 €) son "Otros" de verdad** —
+ningún contacto asociado tiene canal paid. La mayoría son cuentas ya
+existentes (leads históricos de 2024/2025 que abren una oportunidad
+nueva en 2026, mismo patrón que §3.3) o inbound no-paid genuino
+(orgánico, email marketing, direct). Esto es exactamente lo que "Otros"
+está diseñado para capturar (ver comentario en `lib/mock-data.ts`) — no
+hay bug ahí, y bastantes de estos deals ya están Cerrado perdido/ganado
+(cuentan igual: el pipeline se mide por mes de creación del deal —
+decisión 0013 — no por si sigue abierto).
+
+### 5.3 Por qué "Otros" creció tanto en Spain/feb
+
+No es un bug nuevo — es la migración 0020 (decisión #14, 10-jul) haciendo
+su trabajo. Antes de esa migración, los 9 deals con fuente **OFFLINE**
+(177.000 €) no contaban como inbound en absoluto — el audit de 9-jul
+medía Spain/feb en **24.500 € / 3 deals** (§2.2), que son exactamente los
+3 no-OFFLINE de la tabla de arriba (Cox, GrupoNogar, Verley). La 0020
+amplió el scope para incluir OFFLINE-con-contacto-Inbound, correctamente
+(esos 177K € son pipeline real generado por el equipo comercial, antes
+invisible) — pero como casi ninguno tiene origen paid, aterrizan en
+Otros en vez de LinkedIn/Google. El bucket creció porque ahora es más
+completo, no porque esté mal.
+
+**Nota de alcance**: esta sesión no ha podido consultar directamente la
+base de Supabase de producción (`cwcvurrkqwifpngzecxu`) — el único
+acceso disponible eran 2 proyectos personales inactivos, ninguno es el
+de producción — así que el número exacto que ve Davide en el dashboard
+puede diferir algo de los 201.500 €/174.000 € de arriba si el último
+`sync-crm` no ha corrido después de ediciones recientes en HubSpot (todas
+las fichas de esta sección se modificaron entre el 14 y el 20-jul, según
+`hs_lastmodifieddate`). El mecanismo y el caso Stadler están verificados
+100% contra la API de HubSpot en vivo; la reconciliación al euro exacto
+del dashboard requiere acceso a esa base.
+
+### 5.4 Qué hacer
+
+**Corto plazo (HubSpot, manual)**: poner a Nadya Segui como contacto
+primario del deal Stadler, o desasociar a Lino Mesa si ya no pinta nada
+en la oportunidad de CSRD.
+
+**Estructural (pendiente de decidir con Davide antes de tocar
+`deal_attribution`, porque cambiaría números históricos de todos los
+países/meses, no solo Spain/feb)**: la ingesta debería traer **todos**
+los contactos asociados a un deal (no solo `r.to?.[0]`) y, al elegir cuál
+atribuye canal, priorizar el que tenga `analytics_source` PAID_SOCIAL/
+PAID_SEARCH sobre uno más antiguo pero no-paid — mismo espíritu que 0020
+ya aplica (prioriza "contacto Inbound explícito" sobre "deal OFFLINE").
