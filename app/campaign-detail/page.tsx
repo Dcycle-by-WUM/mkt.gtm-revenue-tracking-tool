@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/Page";
-import { StatusBanner } from "@/components/StatusBanner";
 import { listCampaigns } from "@/lib/data/campaigns";
 import { listCampaignTags } from "@/lib/data/campaign-tags";
 import { CampaignDetailClient } from "./campaign-client";
@@ -24,7 +23,6 @@ export default async function CampaignDetailPage() {
         title="Campaign Detail"
         subtitle="Detalle por campaña + rollup por etiquetas (p.ej. 'Webinar') para seguir resultados de un conjunto de campañas."
       />
-      <StatusBanner />
       <CampaignDetailClient campaigns={campaigns} tags={tags} />
     </div>
   );

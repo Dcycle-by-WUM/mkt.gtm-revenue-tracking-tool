@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/Page";
-import { StatusBanner } from "@/components/StatusBanner";
 import { getSeoKpis, getAeoKpis, type OrganicKpi } from "@/lib/data/organic";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +40,6 @@ export default async function OrganicPage() {
         title="Orgánico (SEO) + AEO"
         subtitle="SEO non-branded, Domain Authority, keywords en Top 3, y AEO (AI Visibility / Share of Voice), conectados hasta pipeline € y deals."
       />
-      <StatusBanner />
       <p className="mb-4 rounded border border-[var(--warn-border)] bg-[var(--warn-bg)] px-3 py-2 text-xs text-[var(--warn-text)]">
         Fuentes externas (DA: Moz/Ahrefs/Semrush · AI-visibility: Profound/Peec/Otterly/Semrush AI) están "on hold"
         en <code>docs/DECISIONES.md</code>. El modelo y las pantallas ya están en su sitio: se enchufan en cuanto

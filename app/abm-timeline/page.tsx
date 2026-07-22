@@ -1,5 +1,4 @@
 import { PageHeader, Panel, OnHoldBanner } from "@/components/Page";
-import { StatusBanner } from "@/components/StatusBanner";
 import { getAccountTimeline } from "@/lib/data/timeline";
 import { listAccounts } from "@/lib/data/accounts";
 import { TimelineSelector } from "./timeline-selector";
@@ -36,7 +35,6 @@ export default async function AbmTimelinePage({
         subtitle="Secuencia temporal por cuenta: descargas, visitas, emails, webinar, demo… cruzada con el impacto de paid."
       />
       <OnHoldBanner area="ABM" />
-      <StatusBanner />
 
       <TimelineSelector accounts={accounts.map((a) => a.name)} current={selected} />
 

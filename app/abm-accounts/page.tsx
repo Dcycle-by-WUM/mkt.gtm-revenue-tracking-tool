@@ -1,5 +1,4 @@
 import { PageHeader, OnHoldBanner } from "@/components/Page";
-import { StatusBanner } from "@/components/StatusBanner";
 import { listAccounts } from "@/lib/data/accounts";
 import { listNotes } from "@/lib/data/notes";
 import { AccountsClient } from "./accounts-client";
@@ -16,7 +15,6 @@ export default async function AbmAccountsPage() {
         subtitle="Cuentas-objetivo con Heat Score, SDR e impacto de ads. Edita objetivo ABM, SDR y notas."
       />
       <OnHoldBanner area="ABM" />
-      <StatusBanner />
       <AccountsClient initial={accounts} notes={notes} />
     </div>
   );
