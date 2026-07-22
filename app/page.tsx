@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/Page";
-import { StatusBanner } from "@/components/StatusBanner";
 import { listCampaigns } from "@/lib/data/campaigns";
 import { listCountryGroups } from "@/lib/data/regions";
 import { OverviewClient } from "./overview-client";
@@ -19,7 +18,6 @@ export default async function OverviewPage() {
         title="Overview — Cómo vamos"
         subtitle="Funnel unificado paid + orgánico. Filtra por región/país/mes y baja al detalle con la tabla dinámica."
       />
-      <StatusBanner />
       <OverviewClient initial={initial} groups={groups} />
     </div>
   );

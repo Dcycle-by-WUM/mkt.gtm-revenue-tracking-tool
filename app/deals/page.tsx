@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/Page";
-import { StatusBanner } from "@/components/StatusBanner";
 import { listDealAttribution } from "@/lib/data/deals";
 import { listCountryGroups } from "@/lib/data/regions";
 import { DealsClient } from "./deals-client";
@@ -18,7 +17,6 @@ export default async function DealsPage() {
         title="Deals & Atribución"
         subtitle="Cada deal (fuente ≠ Offline) con su canal, campaña, país y la cohorte del contacto que lo originó. El pipeline agregado del Overview sale de estas mismas filas."
       />
-      <StatusBanner />
       <DealsClient initial={deals} groups={groups} />
     </div>
   );

@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/Page";
-import { StatusBanner } from "@/components/StatusBanner";
 import { listCampaigns } from "@/lib/data/campaigns";
 import { listNotes } from "@/lib/data/notes";
 import { listCountryGroups } from "@/lib/data/regions";
@@ -16,7 +15,6 @@ export default async function PaidPage() {
         title="Paid Media Performance"
         subtitle="Canal × campaña con todas las métricas (§8.4). Filtra por país/mes/canal y deja una nota por campaña."
       />
-      <StatusBanner />
       <PaidClient initial={initial} groups={groups} notes={notes} />
     </div>
   );
