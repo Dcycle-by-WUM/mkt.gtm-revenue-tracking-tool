@@ -13,6 +13,7 @@ const GROUPS: NavGroup[] = [
     title: "Rendimiento",
     items: [
       { href: "/", label: "Overview" },
+      { href: "/metrics", label: "Métricas Canal/País" },
       { href: "/paid", label: "Paid Media" },
       { href: "/deals", label: "Deals & Atribución" },
       { href: "/campaign-detail", label: "Campaign Detail" },
