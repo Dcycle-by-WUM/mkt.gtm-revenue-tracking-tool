@@ -73,6 +73,11 @@ const COUNTRY_LABELS: Record<string, string> = {
   NL: "Netherlands", NETHERLANDS: "Netherlands", NETHERLAND: "Netherlands", HOLANDA: "Netherlands",
   UAE: "UAE", EAU: "UAE", ARAB: "UAE",
   DE: "Germany", GERMANY: "Germany", ALEMANIA: "Germany", DEUTSCHLAND: "Germany",
+  // FR/IT no aparecen (todavía) como token de nombre de campaña, pero SÍ como
+  // opción del selector de país de Explorer — sin esto, un override "FR"/"IT"
+  // se re-horneaba en campaigns.country_parsed tal cual, sin normalizar.
+  FR: "France", FRANCE: "France", FRANCIA: "France",
+  IT: "Italy", ITALY: "Italy", ITALIA: "Italy",
   MULTI: "Multi",
 };
 
