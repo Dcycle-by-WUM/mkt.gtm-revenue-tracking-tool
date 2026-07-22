@@ -6,6 +6,7 @@ import { listCountryGroups } from "@/lib/data/regions";
 import { HeatWeightsEditor } from "./admin-client";
 import { RegionGroupsEditor } from "./regions-client";
 import { LinkedInCsvUploader } from "./linkedin-upload-client";
+import { GoogleAdsCsvUploader } from "./google-ads-upload-client";
 import { fmtEur } from "@/lib/kpis";
 
 export const dynamic = "force-dynamic";
@@ -114,7 +115,8 @@ export default async function AdminPage() {
             </div>
             <div>
               <span className="text-[var(--muted)]">País Google: </span>
-              sufijos <code>-es / -de / -fr / -en…</code> + overrides
+              carga manual (CSV): misma heurística de nombre que LinkedIn; vía
+              Supermetrics: sufijos <code>-es / -de / -fr / -en…</code> + overrides
             </div>
             <div>
               <span className="text-[var(--muted)]">Matching UTM: </span>
@@ -148,6 +150,10 @@ export default async function AdminPage() {
 
       <div className="mt-6">
         <LinkedInCsvUploader />
+      </div>
+
+      <div className="mt-6">
+        <GoogleAdsCsvUploader />
       </div>
 
       <div className="mt-6">

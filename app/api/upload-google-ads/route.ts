@@ -1,38 +1,32 @@
-// Carga manual de LinkedIn Ads (Admin → LinkedIn Ads). Route Handler nativo
-// de Next.js (los intentos previos con netlify/functions/*.ts devolvían un
-// 500 genérico de plataforma; ver historial del repo).
-//
-// El cliente parsea y agrega el CSV EN EL NAVEGADOR y envía aquí solo el
-// agregado campaña×día como JSON (application/json). Motivo: el export de
-// LinkedIn es a nivel Ad × día en UTF-16 y puede superar con facilidad el
-// límite de payload de las funciones de Netlify (~6 MB) — el CSV crudo nunca
-// llegaba al handler y el navegador solo veía un error opaco de plataforma.
-// El agregado son unos pocos cientos de KB como mucho y el trabajo del
-// servidor queda en upserts + refresh de vistas, muy por debajo del timeout.
+// Carga manual de Google Ads (Admin → Google Ads). Misma arquitectura que
+// app/api/upload-linkedin-ads/route.ts: el cliente parsea y agrega el CSV EN
+// EL NAVEGADOR y envía aquí solo el agregado campaña×periodo como JSON — el
+// payload nunca es grande (Google Ads exporta ya a nivel campaña, no ad×día),
+// pero se mantiene el mismo diseño por consistencia y para no depender de
+// límites de payload de la plataforma si el export crece.
 //
 // Se mantiene la ruta multipart/form-data como legacy (útil para curl):
-// recibe el CSV crudo y lo parsea en el servidor, con los límites de arriba.
+// recibe el CSV crudo y lo parsea en el servidor.
 
 import { NextRequest, NextResponse } from "next/server";
-import { ingestLinkedInAdsCsv, ingestLinkedInAggregate, type ManualCountry } from "@/lib/data/ad-spend";
+import { ingestGoogleAdsCsv, ingestGoogleAdsAggregate, type ManualCountry } from "@/lib/data/ad-spend";
 import { COUNTRY_CHOICES } from "@/lib/campaign-country";
-import type { LinkedInAdsAggregate } from "@/lib/linkedin-ads";
+import type { GoogleAdsAggregate } from "@/lib/google-ads";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_SPEND_ROWS = 200_000; // ~500 campañas × 365 días — muy por encima de lo real
+const MAX_SPEND_ROWS = 200_000;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// Países que el flujo de revisión puede asignar a mano — el mismo
-// vocabulario que produce parseCampaignCountry (compartido con Google Ads).
+// Mismo vocabulario que produce parseCampaignCountry (lib/campaign-country.ts).
 const ALLOWED_COUNTRIES = new Set<string>(COUNTRY_CHOICES);
 
 // Valida el payload del cliente campo a campo — viene del navegador, no se
 // confía en la forma. Devuelve el agregado tipado o lanza con mensaje claro.
 function validateAggregatePayload(body: unknown): {
-  agg: LinkedInAdsAggregate;
+  agg: GoogleAdsAggregate;
   rowsParsed: number;
   manualCountries: ManualCountry[];
 } {
@@ -131,14 +125,14 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get("content-type") ?? "";
 
     if (contentType.includes("application/json")) {
-      let parsed: { agg: LinkedInAdsAggregate; rowsParsed: number; manualCountries: ManualCountry[] };
+      let parsed: { agg: GoogleAdsAggregate; rowsParsed: number; manualCountries: ManualCountry[] };
       try {
         parsed = validateAggregatePayload(await req.json());
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         return NextResponse.json({ ok: false, error: msg }, { status: 400 });
       }
-      const summary = await ingestLinkedInAggregate(parsed.agg, parsed.rowsParsed, parsed.manualCountries);
+      const summary = await ingestGoogleAdsAggregate(parsed.agg, parsed.rowsParsed, parsed.manualCountries);
       return NextResponse.json(summary, { status: summary.ok ? 200 : 500 });
     }
 
@@ -149,11 +143,11 @@ export async function POST(req: NextRequest) {
     if (!(file instanceof File)) {
       return NextResponse.json({ ok: false, error: "No se recibió ningún archivo." }, { status: 400 });
     }
-    const summary = await ingestLinkedInAdsCsv(await file.arrayBuffer());
+    const summary = await ingestGoogleAdsCsv(await file.arrayBuffer());
     return NextResponse.json(summary, { status: summary.ok ? 200 : 500 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error(`[upload-linkedin-ads] FAILED → ${msg}`);
+    console.error(`[upload-google-ads] FAILED → ${msg}`);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 }
