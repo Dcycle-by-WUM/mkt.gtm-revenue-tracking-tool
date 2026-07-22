@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   CHANNELS,
   NO_COUNTRY,
@@ -11,11 +11,24 @@ import {
 import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtPct } from "@/lib/kpis";
 import { monthStatus, daysElapsedAndTotal, projectFullMonth, type MonthStatus } from "@/lib/pacing";
+import { actionUpsertTarget } from "@/app/actions";
 
 // Overview "Cómo vamos vs Target" — PRD §9 (2), rediseño jul-2026. Antes esta
 // pantalla mostraba el funnel completo (ahora en /metrics); esta versión se
 // centra en objetivo vs resultado por mes, 3 vistas (Spain / Rest of Intl +
 // DACH / Total), inspirada en la hoja de forecast por canal del Excel.
+
+// El objetivo (Obj) de Spain y de Rest of Intl + DACH se edita aquí mismo,
+// por canal/mes, a nivel de bloque (igual que en la hoja Excel de origen:
+// planifican por región, no país a país). Pero /forecast ya permite fijar
+// objetivos país a país (p. ej. UK, DE) — esos targets "legacy" no se
+// tocan ni se ocultan: siguen sumando aquí. El campo editable de esta
+// pantalla es un "top-up" por región (país sintético, p. ej. "Rest of Intl
+// + DACH"); al editarlo, guardamos solo la DIFERENCIA entre lo que se
+// escribió y lo que ya aportan los targets legacy, así el número que ves =
+// el número que editas, sin duplicar ni perder nada de /forecast.
+// Spain usa "ES" como su propio país-cubo (ya es 1:1 con la región hoy).
+const REST_SCOPE_COUNTRY = "Rest of Intl + DACH";
 
 type ScopeRow = {
   channel: Channel;
@@ -25,18 +38,32 @@ type ScopeRow = {
   actualPipeline: number;
 };
 
+function legacyTargetSum(
+  targets: ForecastRow[],
+  month: string,
+  channel: Channel,
+  bucketCountry: string,
+  inTargetScope: (country: string) => boolean,
+  field: "targetSpend" | "targetPipeline",
+): number {
+  return targets
+    .filter(
+      (r) => r.month === month && r.channel === channel && r.country !== bucketCountry && inTargetScope(r.country),
+    )
+    .reduce((s, r) => s + r[field], 0);
+}
+
 function buildScopeRows(
   targets: ForecastRow[],
   campaigns: CampaignRow[],
   month: string,
-  inScope: (country: string) => boolean,
+  bucketCountry: string,
+  inTargetScope: (country: string) => boolean,
+  inActualScope: (country: string) => boolean,
 ): ScopeRow[] {
-  const t = targets.filter((r) => r.month === month && inScope(r.country));
-  const c = campaigns.filter((r) => r.month === month && inScope(r.country));
-  const channels = CHANNELS.filter(
-    (ch) => t.some((r) => r.channel === ch) || c.some((r) => r.channel === ch),
-  );
-  return channels.map((channel) => ({
+  const t = targets.filter((r) => r.month === month && (r.country === bucketCountry || inTargetScope(r.country)));
+  const c = campaigns.filter((r) => r.month === month && inActualScope(r.country));
+  return CHANNELS.map((channel) => ({
     channel,
     targetSpend: t.filter((r) => r.channel === channel).reduce((s, r) => s + r.targetSpend, 0),
     targetPipeline: t.filter((r) => r.channel === channel).reduce((s, r) => s + r.targetPipeline, 0),
@@ -99,19 +126,24 @@ function PacingBar({ target, actual }: { target: number; actual: number | null }
   );
 }
 
+const objCell =
+  "w-24 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-right text-sm tabular-nums";
+
 function ScopeTable({
   title,
   rows,
   month,
   status,
+  onEditObj,
 }: {
   title: string;
   rows: ScopeRow[];
   month: string;
   status: MonthStatus;
+  /** Si se pasa, Spend Obj / Pipeline Obj se editan aquí mismo. Si no, son solo lectura (Total). */
+  onEditObj?: (channel: Channel, field: "targetSpend" | "targetPipeline", value: number) => void;
 }) {
   const total = sumScope(rows);
-  const actualLabel = status === "past" ? "Real" : status === "current" ? "Proyec." : "—";
   const projTargetSpend = projected(total.actualSpend, month, status);
   const projTargetPipeline = projected(total.actualPipeline, month, status);
 
@@ -126,36 +158,51 @@ function ScopeTable({
           <thead className="bg-[var(--subtle)] text-left text-[11px] uppercase text-[var(--muted)]">
             <tr>
               <th className="px-3 py-2">Canal</th>
-              <th className="px-3 py-2 text-right">Spend obj.</th>
-              <th className="px-3 py-2 text-right">Spend {actualLabel}</th>
+              <th className="px-3 py-2 text-right">Spend Obj</th>
+              <th className="px-3 py-2 text-right">Spend Actual</th>
               <th className="px-3 py-2 text-right">Δ</th>
-              <th className="px-3 py-2 text-right">Pipeline obj.</th>
-              <th className="px-3 py-2 text-right">Pipeline {actualLabel}</th>
+              <th className="px-3 py-2 text-right">Pipeline Obj</th>
+              <th className="px-3 py-2 text-right">Pipeline Actual</th>
               <th className="px-3 py-2 text-right">Δ</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-xs text-[var(--muted)]">
-                  Sin objetivos ni datos para este mes.
-                </td>
-              </tr>
-            )}
             {rows.map((r) => {
               const spendActual = projected(r.actualSpend, month, status);
               const pipeActual = projected(r.actualPipeline, month, status);
               return (
                 <tr key={r.channel} className="border-t border-[var(--border)]">
                   <td className="px-3 py-2">{r.channel}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtEur(r.targetSpend)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {onEditObj ? (
+                      <input
+                        type="number"
+                        className={objCell}
+                        value={r.targetSpend}
+                        onChange={(e) => onEditObj(r.channel, "targetSpend", +e.target.value)}
+                      />
+                    ) : (
+                      <span className="tabular-nums">{fmtEur(r.targetSpend)}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {spendActual === null ? "—" : fmtEur(spendActual)}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <DeltaBadge pct={r.targetSpend > 0 && spendActual !== null ? spendActual / r.targetSpend : null} />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtEur(r.targetPipeline)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {onEditObj ? (
+                      <input
+                        type="number"
+                        className={objCell}
+                        value={r.targetPipeline}
+                        onChange={(e) => onEditObj(r.channel, "targetPipeline", +e.target.value)}
+                      />
+                    ) : (
+                      <span className="tabular-nums">{fmtEur(r.targetPipeline)}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {pipeActual === null ? "—" : fmtEur(pipeActual)}
                   </td>
@@ -166,37 +213,40 @@ function ScopeTable({
               );
             })}
           </tbody>
-          {rows.length > 0 && (
-            <tfoot>
-              <tr className="border-t-2 border-[var(--border)] font-semibold">
-                <td className="px-3 py-2">Total</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtEur(total.targetSpend)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {projTargetSpend === null ? "—" : fmtEur(projTargetSpend)}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <DeltaBadge
-                    pct={total.targetSpend > 0 && projTargetSpend !== null ? projTargetSpend / total.targetSpend : null}
-                  />
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmtEur(total.targetPipeline)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {projTargetPipeline === null ? "—" : fmtEur(projTargetPipeline)}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <DeltaBadge
-                    pct={
-                      total.targetPipeline > 0 && projTargetPipeline !== null
-                        ? projTargetPipeline / total.targetPipeline
-                        : null
-                    }
-                  />
-                </td>
-              </tr>
-            </tfoot>
-          )}
+          <tfoot>
+            <tr className="border-t-2 border-[var(--border)] font-semibold">
+              <td className="px-3 py-2">Total</td>
+              <td className="px-3 py-2 text-right tabular-nums">{fmtEur(total.targetSpend)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {projTargetSpend === null ? "—" : fmtEur(projTargetSpend)}
+              </td>
+              <td className="px-3 py-2 text-right">
+                <DeltaBadge
+                  pct={total.targetSpend > 0 && projTargetSpend !== null ? projTargetSpend / total.targetSpend : null}
+                />
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">{fmtEur(total.targetPipeline)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {projTargetPipeline === null ? "—" : fmtEur(projTargetPipeline)}
+              </td>
+              <td className="px-3 py-2 text-right">
+                <DeltaBadge
+                  pct={
+                    total.targetPipeline > 0 && projTargetPipeline !== null
+                      ? projTargetPipeline / total.targetPipeline
+                      : null
+                  }
+                />
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>
+      {onEditObj && (
+        <p className="border-t border-[var(--border)] px-4 py-2 text-[11px] text-[var(--muted)]">
+          Spend Obj / Pipeline Obj se editan aquí y se guardan al vuelo.
+        </p>
+      )}
     </div>
   );
 }
@@ -233,9 +283,12 @@ export function OverviewClient({
   targets: ForecastRow[];
   groups: CountryGroups;
 }) {
+  const [targetsState, setTargetsState] = useState(targets);
+  const [, startTransition] = useTransition();
+
   const allMonths = useMemo(
-    () => [...new Set([...campaigns.map((c) => c.month), ...targets.map((t) => t.month)])].sort(),
-    [campaigns, targets],
+    () => [...new Set([...campaigns.map((c) => c.month), ...targetsState.map((t) => t.month)])].sort(),
+    [campaigns, targetsState],
   );
 
   const todayMonth = useMemo(() => {
@@ -252,24 +305,58 @@ export function OverviewClient({
   const status = monthStatus(month);
   const idx = allMonths.indexOf(month);
 
+  const spainInTargetScope = (country: string) => regionOf(country, groups) === "Spain";
+  const restInTargetScope = (country: string) => country !== NO_COUNTRY && regionOf(country, groups) !== "Spain";
+
   const spainRows = useMemo(
-    () => buildScopeRows(targets, campaigns, month, (country) => regionOf(country, groups) === "Spain"),
-    [targets, campaigns, month, groups],
+    () => buildScopeRows(targetsState, campaigns, month, "ES", spainInTargetScope, spainInTargetScope),
+    [targetsState, campaigns, month, groups],
   );
   const restRows = useMemo(
-    () =>
-      buildScopeRows(
-        targets,
-        campaigns,
-        month,
-        (country) => country !== NO_COUNTRY && regionOf(country, groups) !== "Spain",
-      ),
-    [targets, campaigns, month, groups],
+    () => buildScopeRows(targetsState, campaigns, month, REST_SCOPE_COUNTRY, restInTargetScope, restInTargetScope),
+    [targetsState, campaigns, month, groups],
   );
-  const totalRows = useMemo(
-    () => buildScopeRows(targets, campaigns, month, () => true),
-    [targets, campaigns, month],
-  );
+  // Total nunca se edita: Obj = suma de Spain + Rest; Actual = suma real de
+  // TODAS las campañas del mes (incluye "Sin país / Multi").
+  const totalRows: ScopeRow[] = useMemo(() => {
+    const monthCampaigns = campaigns.filter((c) => c.month === month);
+    return CHANNELS.map((channel) => {
+      const spainR = spainRows.find((r) => r.channel === channel)!;
+      const restR = restRows.find((r) => r.channel === channel)!;
+      const chCampaigns = monthCampaigns.filter((c) => c.channel === channel);
+      return {
+        channel,
+        targetSpend: spainR.targetSpend + restR.targetSpend,
+        targetPipeline: spainR.targetPipeline + restR.targetPipeline,
+        actualSpend: chCampaigns.reduce((s, r) => s + r.spend, 0),
+        actualPipeline: chCampaigns.reduce((s, r) => s + r.pipeline, 0),
+      };
+    });
+  }, [campaigns, month, spainRows, restRows]);
+
+  // El input muestra el total (legacy de /forecast + top-up de este bloque).
+  // Al editar, solo se recalcula y persiste el top-up — nunca tocamos los
+  // targets legacy por país que ya existieran (p. ej. UK, DE en /forecast).
+  const editObjFor =
+    (bucketCountry: string, inTargetScope: (country: string) => boolean) =>
+    (channel: Channel, field: "targetSpend" | "targetPipeline", value: number) => {
+      setTargetsState((cur) => {
+        const legacy = legacyTargetSum(cur, month, channel, bucketCountry, inTargetScope, field);
+        const topUp = value - legacy;
+        const idx = cur.findIndex((r) => r.channel === channel && r.month === month && r.country === bucketCountry);
+        let next: ForecastRow[];
+        let row: ForecastRow;
+        if (idx === -1) {
+          row = { channel, month, country: bucketCountry, targetSpend: 0, targetPipeline: 0, [field]: topUp };
+          next = [...cur, row];
+        } else {
+          row = { ...cur[idx], [field]: topUp };
+          next = cur.map((r, i) => (i === idx ? row : r));
+        }
+        startTransition(() => { void actionUpsertTarget(row); });
+        return next;
+      });
+    };
 
   return (
     <>
@@ -299,16 +386,27 @@ export function OverviewClient({
       </div>
 
       <div className="flex flex-col gap-4">
-        <ScopeTable title="Spain" rows={spainRows} month={month} status={status} />
-        <ScopeTable title="Rest of Intl + DACH" rows={restRows} month={month} status={status} />
+        <ScopeTable
+          title="Spain"
+          rows={spainRows}
+          month={month}
+          status={status}
+          onEditObj={editObjFor("ES", spainInTargetScope)}
+        />
+        <ScopeTable
+          title="Rest of Intl + DACH"
+          rows={restRows}
+          month={month}
+          status={status}
+          onEditObj={editObjFor(REST_SCOPE_COUNTRY, restInTargetScope)}
+        />
         <ScopeTable title="Total" rows={totalRows} month={month} status={status} />
       </div>
 
       <p className="mt-4 text-xs text-[var(--muted)]">
-        Objetivos editables en{" "}
-        <a href="/forecast" className="underline">Forecast &amp; Objetivos</a>. Spend y Pipeline reales se calculan de
-        los datos con atribución (Ads/HubSpot); en el mes en curso se muestra una proyección a fin de mes a partir
-        de lo consolidado a fecha (pacing lineal).
+        Total no se edita: Spend/Pipeline Obj son la suma de Spain + Rest of Intl + DACH, y Spend/Pipeline Actual son
+        la suma real de todas las campañas del mes. En el mes en curso el Actual es una proyección a fin de mes a
+        partir de lo consolidado a fecha (pacing lineal); en meses cerrados es el real consolidado.
       </p>
     </>
   );
