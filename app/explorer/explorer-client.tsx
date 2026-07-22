@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { Panel } from "@/components/Page";
 import { FilterBar } from "@/components/FilterBar";
-import { PivotTable } from "@/components/PivotTable";
 import { MatrixTable } from "@/components/MatrixTable";
 import { SavedViews } from "@/components/SavedViews";
 import {
@@ -99,9 +98,6 @@ export function ExplorerClient({
         meses en columnas, con totales. Cambia dimensión/métrica y el rango de meses arriba.
       </p>
       <MatrixTable rows={rows} rowDim={rowDim} metric={metric} onRowDim={setRowDim} onMetric={setMetric} />
-
-      <h2 className="mb-2 mt-10 text-base font-semibold">Tabla dinámica (multi-nivel)</h2>
-      <PivotTable rows={rows} initialDims={["country"]} />
 
       <div className="mt-8">
         <Panel title={`Campañas sin país / Multi (${noCountry.length})`}>

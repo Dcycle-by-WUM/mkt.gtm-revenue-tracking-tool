@@ -41,12 +41,3 @@ export async function upsertTarget(t: ForecastRow): Promise<void> {
     { onConflict: "channel,month,country" },
   );
 }
-
-export async function deleteTarget(channel: string, month: string, country: string): Promise<void> {
-  const sb = getSupabaseAdmin();
-  if (!sb) return;
-  await sb
-    .from("targets")
-    .delete()
-    .match({ channel, month, country });
-}
