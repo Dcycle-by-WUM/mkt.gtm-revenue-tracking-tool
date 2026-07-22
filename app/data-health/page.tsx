@@ -106,8 +106,10 @@ export default async function DataHealthPage() {
             ))}
           </ul>
           <p className="mt-3 text-xs text-[var(--muted)]">
-            LinkedIn: por <code>campaignGroupName</code>. Google: por sufijo
-            (<code>-es</code>, <code>-de</code>…). Excepciones via overrides.
+            LinkedIn: por <code>campaignGroupName</code> (Supermetrics) o nombre
+            (CSV manual). Google: por sufijo (<code>-es</code>, <code>-de</code>…,
+            vía Supermetrics) o nombre (CSV manual, misma heurística que LinkedIn).
+            Excepciones via overrides.
           </p>
         </Panel>
       </div>

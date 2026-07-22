@@ -1,7 +1,8 @@
 // Escritura de `campaigns` + `ad_spend_daily` desde fuentes paid. Fase 1:
-// solo LinkedIn Ads vía CSV manual (Ad Performance Report). Idempotente por
-// (source, platform_campaign_id[, date]) — subir el mismo periodo dos veces
-// no duplica; subir un periodo nuevo (p.ej. julio) se suma sin tocar el resto.
+// LinkedIn Ads y Google Ads vía CSV manual (Ad Performance Report / Campaign
+// performance). Idempotente por (source, platform_campaign_id[, date]) —
+// subir el mismo periodo dos veces no duplica; subir un periodo nuevo (p.ej.
+// julio) se suma sin tocar el resto.
 
 import { requireSupabaseAdmin } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
@@ -12,6 +13,12 @@ import {
   normalizeCountryLabel,
   type LinkedInAdsAggregate,
 } from "@/lib/linkedin-ads";
+import {
+  decodeGoogleAdsCsv,
+  parseGoogleAdsCsv,
+  aggregateGoogleAds,
+  type GoogleAdsAggregate,
+} from "@/lib/google-ads";
 
 const BATCH_SIZE = 500;
 
@@ -21,7 +28,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-export type LinkedInIngestSummary = {
+export type AdSpendIngestSummary = {
   ok: boolean;
   error?: string;
   rowsParsed: number;
@@ -35,37 +42,57 @@ export type LinkedInIngestSummary = {
   // el dashboard sigue mostrando cifras antiguas hasta el próximo refresh.
   viewsRefreshed?: boolean;
 };
+export type LinkedInIngestSummary = AdSpendIngestSummary;
+export type GoogleIngestSummary = AdSpendIngestSummary;
 
-// Compat: ruta legacy que recibe el CSV crudo y lo parsea en el servidor.
-// El flujo actual parsea/agrega en el NAVEGADOR (ver linkedin-upload-client)
-// y llama a ingestLinkedInAggregate con el resultado — mucho más pequeño que
-// el CSV a nivel Ad y sin depender de límites de payload de la plataforma.
-export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInIngestSummary> {
-  const text = decodeLinkedInCsv(file);
-  const rawRows = parseLinkedInAdsCsv(text);
-  const agg = aggregateLinkedInAds(rawRows);
-  return ingestLinkedInAggregate(agg, rawRows.length);
-}
+// Forma común de un agregado campaña×spend, independiente de la fuente
+// (LinkedInAdsAggregate y GoogleAdsAggregate tienen esta misma forma).
+type AnyAdsAggregate = {
+  spendRows: {
+    date: string;
+    platformCampaignId: string;
+    spend: number;
+    currency: string;
+    impressions: number;
+    clicks: number;
+  }[];
+  campaigns: {
+    platformCampaignId: string;
+    campaignName: string;
+    campaignNameNorm: string;
+    countryParsed: string;
+    firstSeen: string;
+    lastSeen: string;
+  }[];
+  totalSpend: number;
+  dateRange: { min: string; max: string } | null;
+};
 
 // País asignado a mano por quien sube el CSV (flujo de revisión de campañas
 // "Multi sin señal"). Se persiste en `country_overrides` (pattern = nombre
 // exacto) para que las siguientes subidas lo apliquen sin volver a preguntar.
 export type ManualCountry = { campaignName: string; country: string };
 
-// El run de `sync_runs` se crea ANTES de tocar datos — el cliente hace
-// polling contra esta tabla como red de seguridad si pierde la respuesta
-// HTTP, y necesita encontrar una fila enseguida y verla resolverse a
-// "ok"/"error".
-export async function ingestLinkedInAggregate(
-  agg: LinkedInAdsAggregate,
+// Escritura genérica de `campaigns` + `ad_spend_daily` desde un agregado
+// campaña×spend ya parseado — compartida por LinkedIn Ads y Google Ads, las
+// dos fuentes de carga manual (misma lógica, PRD §7: idempotente por
+// (source, platform_campaign_id[, date]); overrides de país ganan siempre
+// sobre lo parseado del nombre). El run de `sync_runs` se crea ANTES de
+// tocar datos — el cliente hace polling contra esta tabla como red de
+// seguridad si pierde la respuesta HTTP, y necesita encontrar una fila
+// enseguida y verla resolverse a "ok"/"error".
+async function ingestAdSpendAggregate(
+  source: "LinkedIn" | "Google",
+  syncRunSource: string,
+  agg: AnyAdsAggregate,
   rowsParsed: number,
   manualCountries: ManualCountry[] = [],
-): Promise<LinkedInIngestSummary> {
+): Promise<AdSpendIngestSummary> {
   const sb = requireSupabaseAdmin();
 
   const runIns = await sb
     .from("sync_runs")
-    .insert({ source: "linkedin", status: "running" })
+    .insert({ source: syncRunSource, status: "running" })
     .select("id")
     .single();
   if (runIns.error || !runIns.data) {
@@ -82,7 +109,7 @@ export async function ingestLinkedInAggregate(
       const seeded = manualCountries.map((m) => ({
         pattern: m.campaignName,
         country: m.country,
-        author: "linkedin-upload",
+        author: `${source.toLowerCase()}-upload`,
       }));
       for (const batch of chunk(seeded, BATCH_SIZE)) {
         const { error } = await sb.from("country_overrides").upsert(batch, { onConflict: "pattern" });
@@ -119,7 +146,7 @@ export async function ingestLinkedInAggregate(
         sb
           .from("campaigns")
           .select("platform_campaign_id, first_seen, last_seen")
-          .eq("source", "LinkedIn")
+          .eq("source", source)
           .in("platform_campaign_id", platformIds),
     );
     const existingById = new Map(existing.map((r) => [r.platform_campaign_id, r]));
@@ -129,7 +156,7 @@ export async function ingestLinkedInAggregate(
       const firstSeen = prev?.first_seen && prev.first_seen < c.firstSeen ? prev.first_seen : c.firstSeen;
       const lastSeen = prev?.last_seen && prev.last_seen > c.lastSeen ? prev.last_seen : c.lastSeen;
       return {
-        source: "LinkedIn",
+        source,
         platform_campaign_id: c.platformCampaignId,
         campaign_name: c.campaignName,
         campaign_name_norm: c.campaignNameNorm,
@@ -153,7 +180,7 @@ export async function ingestLinkedInAggregate(
     // 2) ad_spend_daily — requiere campaign_id (uuid) para que la vista
     //    kpi_by_campaign_month (join por campaign_id) recoja el spend.
     const spendRows = agg.spendRows.map((s) => ({
-      source: "LinkedIn",
+      source,
       platform_campaign_id: s.platformCampaignId,
       date: s.date,
       campaign_id: idByPlatformId.get(s.platformCampaignId) ?? null,
@@ -198,11 +225,11 @@ export async function ingestLinkedInAggregate(
       const { error } = await sb.rpc("refresh_kpi_views");
       if (error) {
         viewsRefreshed = false;
-        console.error(`[linkedin-ads] refresh_kpi_views failed: ${error.message}`);
+        console.error(`[${syncRunSource}] refresh_kpi_views failed: ${error.message}`);
       }
     } catch (e) {
       viewsRefreshed = false;
-      console.error(`[linkedin-ads] refresh_kpi_views failed: ${e instanceof Error ? e.message : e}`);
+      console.error(`[${syncRunSource}] refresh_kpi_views failed: ${e instanceof Error ? e.message : e}`);
     }
 
     return {
@@ -236,4 +263,42 @@ export async function ingestLinkedInAggregate(
       multiCampaigns: [],
     };
   }
+}
+
+// Compat: ruta legacy que recibe el CSV crudo y lo parsea en el servidor.
+// El flujo actual parsea/agrega en el NAVEGADOR (ver linkedin-upload-client)
+// y llama a ingestLinkedInAggregate con el resultado — mucho más pequeño que
+// el CSV a nivel Ad y sin depender de límites de payload de la plataforma.
+export async function ingestLinkedInAdsCsv(file: ArrayBuffer): Promise<LinkedInIngestSummary> {
+  const text = decodeLinkedInCsv(file);
+  const rawRows = parseLinkedInAdsCsv(text);
+  const agg = aggregateLinkedInAds(rawRows);
+  return ingestLinkedInAggregate(agg, rawRows.length);
+}
+
+export async function ingestLinkedInAggregate(
+  agg: LinkedInAdsAggregate,
+  rowsParsed: number,
+  manualCountries: ManualCountry[] = [],
+): Promise<LinkedInIngestSummary> {
+  return ingestAdSpendAggregate("LinkedIn", "linkedin", agg, rowsParsed, manualCountries);
+}
+
+// Compat: ruta legacy que recibe el CSV crudo y lo parsea en el servidor
+// (ver comentario equivalente de ingestLinkedInAdsCsv más arriba).
+export async function ingestGoogleAdsCsv(file: ArrayBuffer): Promise<GoogleIngestSummary> {
+  const text = decodeGoogleAdsCsv(file);
+  const parsed = parseGoogleAdsCsv(text);
+  const agg = aggregateGoogleAds(parsed);
+  return ingestGoogleAdsAggregate(agg, parsed.rows.length);
+}
+
+export async function ingestGoogleAdsAggregate(
+  agg: GoogleAdsAggregate,
+  rowsParsed: number,
+  manualCountries: ManualCountry[] = [],
+): Promise<GoogleIngestSummary> {
+  // sync_runs.source = "google_ads" — mismo literal que lee lib/data/source-health.ts
+  // para casar la frescura del último run con la fila "Google Ads (AW)".
+  return ingestAdSpendAggregate("Google", "google_ads", agg, rowsParsed, manualCountries);
 }

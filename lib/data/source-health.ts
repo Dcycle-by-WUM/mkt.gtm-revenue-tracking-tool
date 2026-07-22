@@ -42,11 +42,11 @@ export async function getSourceHealth(): Promise<SourceHealthLive[]> {
     ),
     baseRow(
       "Google Ads (AW)",
-      "Supermetrics API",
+      integrations.supermetrics ? "Supermetrics API" : "CSV manual (Admin)",
       integrations.supermetrics,
       integrations.supermetrics
         ? "Token configurado; pendiente de cron diario."
-        : "Autenticado en Supermetrics; falta SUPERMETRICS_API_KEY en env.",
+        : "Fase 1 sin Supermetrics: carga manual del export \"Campaign performance\" en Admin → Google Ads.",
     ),
     baseRow(
       "HubSpot (CRM)",
