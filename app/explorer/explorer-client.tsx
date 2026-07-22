@@ -15,6 +15,13 @@ import { actionSetCountryOverride, actionClearCountryOverride } from "@/app/acti
 
 const COUNTRY_OPTIONS = [NO_COUNTRY, "ES", "UK", "DE", "FR", "US", "MX", "IT"];
 
+// "Multi" es el país que escriben los parsers de LinkedIn/Google Ads cuando
+// el nombre de campaña no trae país reconocible (o lo anuncia a propósito:
+// INT genérico, EUROPA…) — un literal distinto de NO_COUNTRY ("Sin país /
+// Multi", el sentinel para country_parsed nulo). El panel de abajo se llama
+// "sin país / Multi" así que tiene que enseñar las dos cosas.
+const MULTI_COUNTRY = "Multi";
+
 // Estado guardable de la vista (filtros + configuración de la matriz).
 type ExplorerView = { filters: Filters; rowDim: Dimension; metric: MetricKey };
 
@@ -42,7 +49,9 @@ export function ExplorerClient({
 
   const all = applyOverrides(initialCampaigns, overrides);
   const rows = filterCampaigns(all, filters, groups);
-  const noCountry = [...new Map(all.filter((r) => r.country === NO_COUNTRY).map((r) => [r.campaign, r])).values()];
+  const noCountry = [...new Map(
+    all.filter((r) => r.country === NO_COUNTRY || r.country === MULTI_COUNTRY).map((r) => [r.campaign, r]),
+  ).values()];
 
   const setCountry = (campaign: string, country: string) => {
     setOverrides((cur) => {
