@@ -7,7 +7,7 @@ import { PivotTable } from "@/components/PivotTable";
 import { MatrixTable } from "@/components/MatrixTable";
 import { SavedViews } from "@/components/SavedViews";
 import {
-  filterCampaigns, paidCountriesOf, monthsOf, emptyFilters, currentYearStart, NO_COUNTRY,
+  filterCampaigns, paidCountriesOf, monthsOf, emptyFilters, currentYearStart, NO_COUNTRY, isPaidChannel,
   applyOverrides, type CampaignRow, type CountryOverrides, type Dimension, type Filters, type MetricKey,
 } from "@/lib/mock-data";
 import type { CountryGroups } from "@/lib/regions";
@@ -50,7 +50,9 @@ export function ExplorerClient({
   const all = applyOverrides(initialCampaigns, overrides);
   const rows = filterCampaigns(all, filters, groups);
   const noCountry = [...new Map(
-    all.filter((r) => r.country === NO_COUNTRY || r.country === MULTI_COUNTRY).map((r) => [r.campaign, r]),
+    all
+      .filter((r) => isPaidChannel(r.channel) && (r.country === NO_COUNTRY || r.country === MULTI_COUNTRY))
+      .map((r) => [r.campaign, r]),
   ).values()];
 
   const setCountry = (campaign: string, country: string) => {
