@@ -103,21 +103,38 @@ function DeltaBadge({ pct }: { pct: number | null }) {
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{fmtPct(pct)}</span>;
 }
 
-function PacingBar({ target, actual }: { target: number; actual: number | null }) {
+// Pipeline: más que el objetivo es bueno (verde a partir de 100%, ámbar
+// cerca). Spend: más que el objetivo es sobrecoste (rojo a partir de 100%;
+// verde por debajo, sin tramo ámbar intermedio).
+function PacingBar({
+  label,
+  target,
+  actual,
+  mode,
+}: {
+  label: string;
+  target: number;
+  actual: number | null;
+  mode: "pipeline" | "spend";
+}) {
   if (target <= 0) return null;
   const pct = actual === null ? null : actual / target;
   const widthPct = pct === null ? 0 : Math.min(pct, 1) * 100;
   const barCls =
     pct === null
       ? "bg-[var(--border)]"
-      : pct >= 1
-        ? "bg-emerald-600"
-        : pct >= 0.85
-          ? "bg-amber-500"
-          : "bg-red-600";
+      : mode === "spend"
+        ? pct > 1
+          ? "bg-red-600"
+          : "bg-emerald-600"
+        : pct >= 1
+          ? "bg-emerald-600"
+          : pct >= 0.85
+            ? "bg-amber-500"
+            : "bg-red-600";
   return (
     <div className="flex items-center gap-2 px-4 py-2.5">
-      <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-[var(--muted)]">Pipeline</span>
+      <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</span>
       <div className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--subtle)]">
         <div className={`h-full rounded-full ${barCls}`} style={{ width: `${widthPct}%` }} />
       </div>
@@ -135,6 +152,7 @@ function ScopeTable({
   month,
   status,
   onEditObj,
+  showSpendBar = false,
 }: {
   title: string;
   rows: ScopeRow[];
@@ -142,6 +160,8 @@ function ScopeTable({
   status: MonthStatus;
   /** Si se pasa, Spend Obj / Pipeline Obj se editan aquí mismo. Si no, son solo lectura (Total). */
   onEditObj?: (channel: Channel, field: "targetSpend" | "targetPipeline", value: number) => void;
+  /** Total además muestra pacing de Spend (sobrecoste en rojo), no solo de Pipeline. */
+  showSpendBar?: boolean;
 }) {
   const total = sumScope(rows);
   const projTargetSpend = projected(total.actualSpend, month, status);
@@ -152,7 +172,8 @@ function ScopeTable({
       <div className="border-b border-[var(--border)] px-4 py-3">
         <h3 className="text-sm font-semibold">{title}</h3>
       </div>
-      <PacingBar target={total.targetPipeline} actual={projTargetPipeline} />
+      {showSpendBar && <PacingBar label="Spend" target={total.targetSpend} actual={projTargetSpend} mode="spend" />}
+      <PacingBar label="Pipeline" target={total.targetPipeline} actual={projTargetPipeline} mode="pipeline" />
       <div className="overflow-x-auto rounded-b-xl">
         <table className="w-full text-sm">
           <thead className="bg-[var(--subtle)] text-left text-[11px] uppercase text-[var(--muted)]">
@@ -185,7 +206,11 @@ function ScopeTable({
                       <span className="tabular-nums">{fmtEur(r.targetSpend)}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${
+                      spendActual !== null && spendActual > r.targetSpend ? "text-red-700" : ""
+                    }`}
+                  >
                     {spendActual === null ? "—" : fmtEur(spendActual)}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -217,7 +242,11 @@ function ScopeTable({
             <tr className="border-t-2 border-[var(--border)] font-semibold">
               <td className="px-3 py-2">Total</td>
               <td className="px-3 py-2 text-right tabular-nums">{fmtEur(total.targetSpend)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
+              <td
+                className={`px-3 py-2 text-right tabular-nums ${
+                  projTargetSpend !== null && projTargetSpend > total.targetSpend ? "text-red-700" : ""
+                }`}
+              >
                 {projTargetSpend === null ? "—" : fmtEur(projTargetSpend)}
               </td>
               <td className="px-3 py-2 text-right">
@@ -400,7 +429,7 @@ export function OverviewClient({
           status={status}
           onEditObj={editObjFor(REST_SCOPE_COUNTRY, restInTargetScope)}
         />
-        <ScopeTable title="Total" rows={totalRows} month={month} status={status} />
+        <ScopeTable title="Total" rows={totalRows} month={month} status={status} showSpendBar />
       </div>
 
       <p className="mt-4 text-xs text-[var(--muted)]">
