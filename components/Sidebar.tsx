@@ -14,9 +14,8 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: "/", label: "Overview" },
       { href: "/metrics", label: "Métricas Canal/País" },
-      { href: "/paid", label: "Paid Media" },
+      { href: "/paid", label: "Detalle por Campaña/Canal" },
       { href: "/deals", label: "Deals & Atribución" },
-      { href: "/campaign-detail", label: "Campaign Detail" },
       { href: "/organic", label: "Orgánico + AEO" },
     ],
   },

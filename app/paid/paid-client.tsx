@@ -8,7 +8,7 @@ import {
 } from "@/lib/mock-data";
 import type { CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtNum, fmtPct, ctr, cpc, cpm, cpl, cpmql, cpsql, roi, type ChannelMetrics } from "@/lib/kpis";
-import { actionUpsertNote } from "@/app/actions";
+import { actionSetCampaignTags } from "@/app/actions";
 
 type AggRow = ChannelMetrics & { campaign: string; channel: string; campaignGroup: string | null; country: string };
 
@@ -47,13 +47,13 @@ const cols: { label: string; fn: (r: ChannelMetrics) => string }[] = [
 export function PaidClient({
   initial,
   groups,
-  notes: initialNotes,
+  tags: initialTags,
 }: {
   initial: CampaignRow[];
   groups: CountryGroups;
-  notes: Record<string, string>;
+  tags: Record<string, string[]>;
 }) {
-  const [notes, setNotes] = useState(initialNotes);
+  const [tags, setTags] = useState(initialTags);
   const [, startTransition] = useTransition();
   const [filters, setFilters] = useState(emptyFilters);
   const [search, setSearch] = useState("");
@@ -64,10 +64,11 @@ export function PaidClient({
     : allRows;
   const t = sumMetrics(rows);
 
-  const updateNote = (campaign: string, body: string) => {
-    setNotes((n) => ({ ...n, [campaign]: body }));
+  const updateTags = (campaign: string, raw: string) => {
+    const list = raw.split(",").map((tag) => tag.trim()).filter(Boolean);
+    setTags((cur) => ({ ...cur, [campaign]: list }));
     startTransition(() => {
-      void actionUpsertNote("campaign", campaign, body);
+      void actionSetCampaignTags(campaign, list);
     });
   };
 
@@ -104,7 +105,7 @@ export function PaidClient({
               {cols.map((c) => (
                 <th key={c.label} className="px-3 py-3 text-right">{c.label}</th>
               ))}
-              <th className="px-3 py-3">Nota</th>
+              <th className="px-3 py-3">Etiquetas</th>
             </tr>
           </thead>
           <tbody>
@@ -118,9 +119,9 @@ export function PaidClient({
                 ))}
                 <td className="px-3 py-2">
                   <input
-                    value={notes[r.campaign] ?? ""}
-                    onChange={(e) => updateNote(r.campaign, e.target.value)}
-                    placeholder="Apunte…"
+                    defaultValue={(tags[r.campaign] ?? []).join(", ")}
+                    onBlur={(e) => updateTags(r.campaign, e.target.value)}
+                    placeholder="Webinar, MOFU…"
                     className="w-40 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs"
                   />
                 </td>
@@ -142,8 +143,8 @@ export function PaidClient({
         </table>
       </div>
       <p className="mt-3 text-xs text-[var(--muted)]">
-        Las notas se persisten en Supabase con autor y fecha cuando hay
-        conexión; en local quedan en memoria de la sesión.
+        Etiquetas separadas por comas (p.ej. <code>Webinar, MOFU</code>) para agrupar campañas y seguir resultados
+        conjuntos. Se persisten en Supabase; en local quedan en memoria de la sesión.
       </p>
     </>
   );

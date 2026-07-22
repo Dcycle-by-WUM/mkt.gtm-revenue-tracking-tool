@@ -45,7 +45,7 @@ export async function actionDeleteTarget(channel: string, month: string, country
 
 export async function actionSetCampaignTags(campaign: string, tags: string[]): Promise<void> {
   await setCampaignTagsByName(campaign, tags);
-  revalidatePath("/campaign-detail");
+  revalidatePath("/paid");
 }
 
 export async function actionUpdateAccount(
