@@ -19,6 +19,21 @@ export const DEFAULT_GROUPS: CountryGroups = {
   US: REST_OF_INTL, MX: REST_OF_INTL, PT: REST_OF_INTL, NL: REST_OF_INTL,
 };
 
+// Nombre legible para mostrar en tablas (comparación por mes del Explorer,
+// etc.) — el código ("ES", "UK"…) es el que se usa para filtrar/agrupar,
+// pero en pantalla un nombre real se lee mejor. Claves fuera de este mapa
+// (NO_COUNTRY, buckets "Otros · <región>", canales, campañas…) se muestran
+// tal cual, sin traducir.
+const COUNTRY_NAMES: Record<string, string> = {
+  ES: "España", UK: "Reino Unido", DE: "Alemania", FR: "Francia", IT: "Italia",
+  US: "Estados Unidos", MX: "México", PT: "Portugal", NL: "Países Bajos",
+  AT: "Austria", CH: "Suiza",
+};
+
+export function countryDisplayName(code: string): string {
+  return COUNTRY_NAMES[code] ?? code;
+}
+
 // Espejo JS de la función SQL normalize_country() (migración 0014): pasa el
 // texto libre de país ("Spain", "España"…) al mismo código canónico que usan
 // las campañas. Se aplica al LEER (fachadas lib/data/*) como cinturón de

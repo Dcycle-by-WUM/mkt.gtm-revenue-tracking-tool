@@ -5,6 +5,7 @@ import {
   type CampaignRow, type Dimension, type MetricKey,
 } from "@/lib/mock-data";
 import { fmtEur, fmtNum } from "@/lib/kpis";
+import { countryDisplayName } from "@/lib/regions";
 
 // Matriz de comparación: una dimensión (país / canal / campaña) en filas,
 // meses en columnas, UNA métrica por celda, con totales de fila y columna.
@@ -33,6 +34,9 @@ export function MatrixTable({
   const m = buildMonthMatrix(rows, rowDim, metric);
   const eur = METRIC_IS_EUR[metric];
   const fmt = (v: number) => (v === 0 ? "·" : eur ? fmtEur(v) : fmtNum(v));
+  // Filas en cero en todos los meses son ruido, no señal — se quitan.
+  const visibleRows = m.rows.filter((r) => r.total !== 0);
+  const rowLabel = (key: string) => (rowDim === "country" ? countryDisplayName(key) : key);
 
   return (
     <div>
@@ -62,7 +66,7 @@ export function MatrixTable({
         </div>
       </div>
 
-      {m.rows.length === 0 || m.months.length === 0 ? (
+      {visibleRows.length === 0 || m.months.length === 0 ? (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--panel)] p-6 text-center text-sm text-[var(--muted)]">
           No hay datos para el filtro actual.
         </div>
@@ -81,9 +85,15 @@ export function MatrixTable({
               </tr>
             </thead>
             <tbody>
-              {m.rows.map((r) => (
+              {visibleRows.map((r) => (
                 <tr key={r.key} className="border-t border-[var(--border)]">
-                  <td className="sticky left-0 z-10 bg-[var(--panel)] px-3 py-2 font-mono text-xs">{r.key}</td>
+                  <td
+                    className={`sticky left-0 z-10 bg-[var(--panel)] px-3 py-2 ${
+                      rowDim === "country" ? "text-sm" : "font-mono text-xs"
+                    }`}
+                  >
+                    {rowLabel(r.key)}
+                  </td>
                   {r.cells.map((v, i) => (
                     <td key={i} className={`px-3 py-2 text-right tabular-nums ${v === 0 ? "text-[var(--muted)]" : ""}`}>
                       {fmt(v)}

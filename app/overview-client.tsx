@@ -20,14 +20,15 @@ import { actionUpsertTarget } from "@/app/actions";
 
 // El objetivo (Obj) de Spain y de Rest of Intl + DACH se edita aquí mismo,
 // por canal/mes, a nivel de bloque (igual que en la hoja Excel de origen:
-// planifican por región, no país a país). Pero /forecast ya permite fijar
-// objetivos país a país (p. ej. UK, DE) — esos targets "legacy" no se
-// tocan ni se ocultan: siguen sumando aquí. El campo editable de esta
-// pantalla es un "top-up" por región (país sintético, p. ej. "Rest of Intl
-// + DACH"); al editarlo, guardamos solo la DIFERENCIA entre lo que se
-// escribió y lo que ya aportan los targets legacy, así el número que ves =
-// el número que editas, sin duplicar ni perder nada de /forecast.
-// Spain usa "ES" como su propio país-cubo (ya es 1:1 con la región hoy).
+// planifican por región, no país a país). La vieja pantalla Forecast &
+// Objetivos (eliminada — esto ya vive en Overview) permitía fijar objetivos
+// país a país (p. ej. UK, DE); esos targets "legacy" no se tocan ni se
+// ocultan, siguen sumando aquí. El campo editable de esta pantalla es un
+// "top-up" por región (país sintético, p. ej. "Rest of Intl + DACH"); al
+// editarlo, guardamos solo la DIFERENCIA entre lo que se escribió y lo que
+// ya aportan los targets legacy, así el número que ves = el número que
+// editas, sin duplicar ni perder nada. Spain usa "ES" como su propio
+// país-cubo (ya es 1:1 con la región hoy).
 const REST_SCOPE_COUNTRY = "Rest of Intl + DACH";
 
 type ScopeRow = {
@@ -363,9 +364,9 @@ export function OverviewClient({
     });
   }, [campaigns, month, spainRows, restRows]);
 
-  // El input muestra el total (legacy de /forecast + top-up de este bloque).
-  // Al editar, solo se recalcula y persiste el top-up — nunca tocamos los
-  // targets legacy por país que ya existieran (p. ej. UK, DE en /forecast).
+  // El input muestra el total (targets legacy por país + top-up de este
+  // bloque). Al editar, solo se recalcula y persiste el top-up — nunca
+  // tocamos los targets legacy por país que ya existieran (p. ej. UK, DE).
   const editObjFor =
     (bucketCountry: string, inTargetScope: (country: string) => boolean) =>
     (channel: Channel, field: "targetSpend" | "targetPipeline", value: number) => {

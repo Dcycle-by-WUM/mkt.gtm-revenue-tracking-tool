@@ -7,7 +7,7 @@
 import { revalidatePath } from "next/cache";
 import { upsertCountryOverride, deleteCountryOverride } from "@/lib/data/overrides";
 import { upsertNote, type NoteKind } from "@/lib/data/notes";
-import { upsertTarget, deleteTarget } from "@/lib/data/targets";
+import { upsertTarget } from "@/lib/data/targets";
 import { setCampaignTagsByName } from "@/lib/data/campaign-tags";
 import { updateAccountAbm } from "@/lib/data/accounts";
 import { setActiveHeatWeights, type HeatWeightsDoc } from "@/lib/data/heat-weights";
@@ -35,12 +35,7 @@ export async function actionUpsertNote(kind: NoteKind, key: string, body: string
 
 export async function actionUpsertTarget(t: ForecastRow): Promise<void> {
   await upsertTarget(t);
-  revalidatePath("/forecast");
-}
-
-export async function actionDeleteTarget(channel: string, month: string, country: string): Promise<void> {
-  await deleteTarget(channel, month, country);
-  revalidatePath("/forecast");
+  revalidatePath("/");
 }
 
 export async function actionSetCampaignTags(campaign: string, tags: string[]): Promise<void> {

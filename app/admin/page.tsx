@@ -140,7 +140,7 @@ export default async function AdminPage() {
               ))}
             </ul>
           )}
-          <p className="mt-2 text-xs text-[var(--muted)]">Edítalos en <a href="/forecast" className="text-[var(--accent)] underline">Pipeline & Forecast</a>.</p>
+          <p className="mt-2 text-xs text-[var(--muted)]">Edítalos en <a href="/" className="text-[var(--accent)] underline">Overview</a>.</p>
         </Panel>
 
         <Panel title="Regiones (grupos de países)">

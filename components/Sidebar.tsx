@@ -22,7 +22,6 @@ const GROUPS: NavGroup[] = [
   {
     title: "Planificación",
     items: [
-      { href: "/forecast", label: "Forecast & Objetivos" },
       { href: "/explorer", label: "Explorer (pivot)" },
     ],
   },
