@@ -10,6 +10,6 @@ Estado de las decisiones abiertas del Brief §12 / Racional §K. Leyenda: ✅ ce
 | 4 | **Pesos del Heat Score** | ✅ Cerrada | Validado. Versión §H (señales × recencia, bandas 🔥/⚡/🌱/❄️). Ajustable en Admin si hiciera falta. |
 | 5 | **LinkedIn Companies Engagement Report** (¿Supermetrics o CSV semanal?) | ⏳ Pendiente | Owners: **Davide y Cris**. Alimenta el Heat Score. |
 | 6 | **Herramienta SEO** (DA/rankings: Moz/Ahrefs/Semrush) | ⏸️ On hold | Owners: **Davide y Cris**. Fase 5. |
-| 7 | **Plataforma AI-visibility** (Profound/Peec/Otterly/Semrush AI) + prompts y competidores | ⏸️ On hold | Owners: **Davide y Cris**. Fase 5. |
+| 7 | **Plataforma AI-visibility** (Profound/Peec/Otterly/Semrush AI) + prompts y competidores | ⏸️ On hold | Owners: **Davide y Cris**. Fase 5. **Criterio añadido:** debe soportar **Microsoft Copilot** como motor rastreado explícitamente — motor prioritario porque la mayoría de clientes Dcycle lo usan y Copilot se nutre del índice de Bing (verificar soporte vigente en cada proveedor antes de decidir, es un espacio que cambia rápido). |
 
 > Las decisiones cerradas (1, 2, 4) ya están reflejadas en el comportamiento del prototipo / la lógica documentada. Las pendientes/on hold no bloquean el arranque del camino paid (F1).

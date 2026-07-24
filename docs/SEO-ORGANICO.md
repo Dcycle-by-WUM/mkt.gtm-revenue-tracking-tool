@@ -34,7 +34,10 @@ Cuatro capas, de tráfico a negocio. Las **4 preguntas prioritarias** están mar
 - Leads/MQL orgánicos, pipeline € y closed won atribuidos a orgánico.
 
 **4. AEO / Bing** (ya contemplado en el brief, se mantiene)
-- AI Visibility, AI Share of Voice (plataforma a confirmar, §12), Bing impresiones/clics/posición.
+- **Motor prioritario: Microsoft Copilot** — la mayoría de clientes Dcycle lo usan, y **Copilot se nutre del índice de Bing** (grounding web vía Bing Search), a diferencia de ChatGPT/Perplexity que rastrean con sus propios bots. Por eso Bing WMT no es solo "un bloque más": es la señal técnica más directa de visibilidad en Copilot.
+- AI Visibility / AI Share of Voice **desglosados por motor** (Copilot primero; luego ChatGPT/Perplexity/Gemini) — plataforma a confirmar, §12, con **soporte de Copilot como criterio obligatorio**.
+- ★ **Banco de prompts → cita**: para cada prompt estratégico, ¿aparece Dcycle en la respuesta?, ¿qué URL cita?, ¿qué competidores aparecen? — mismo patrón de *gap* que keyword→página objetivo en SEO.
+- Bing impresiones/clics/posición (Bing WMT) — proxy de salud de indexación para Copilot.
 
 **Objetivo (target vs real):** **objetivo editable de demos orgánicas** por mes/país, con barra de cumplimiento real vs objetivo (mismo patrón que Forecast).
 
@@ -48,10 +51,11 @@ Cada canal se conecta por su **propia API nativa** (no Supermetrics): GSC, GA4 y
 | --- | --- | --- | --- | --- |
 | **GSC** | Search Console API (`searchanalytics.query`) | OAuth 2.0 / service account Google | query, page, position, clicks, impressions, ctr (separar marca con lista `brand_keywords` propia) | URLs top, keyword→página, non-branded |
 | **GA4** | GA4 Data API (`runReport`) | OAuth 2.0 / service account Google | landingPage, sessionSourceMedium (`organic`), eventName=`demo_request`, sessions, conversions | Demos orgánicas, conversion rate por landing |
-| **Bing WMT** | Bing Webmaster Tools API | API key de Bing WMT | impressions, clicks, query, position | Bloque Bing/AEO |
+| **Bing WMT** | Bing Webmaster Tools API | API key de Bing WMT | impressions, clicks, query, position | Bloque Bing/AEO — **proxy técnico de visibilidad en Copilot** (Copilot se nutre del índice de Bing) |
 | **HubSpot** | API privada (private app) | token de app privada (pendiente, §12) | `original_source`, `hs_lead_status`, `recent_conversion`, deals (`amount`, `dealstage`) | Demos confirmadas, lead status, pipeline € |
+| **AI-visibility** (Profound/Peec/Otterly/Semrush AI) | API/export propio del proveedor | API key del proveedor (pendiente, §12 — **debe soportar Copilot explícitamente**) | prompt, motor, ¿aparece Dcycle?, URL citada, competidores citados | Banco de prompts → cita (AEO por motor) |
 
-> **Nota de implementación:** un cliente/módulo por canal en `lib/` (p.ej. `lib/gsc.ts`, `lib/ga4.ts`, `lib/bing.ts`, `lib/hubspot.ts`), cada uno con su credencial en env vars propias de Netlify. El stub `lib/supermetrics.ts` **no se usa** para SEO.
+> **Nota de implementación:** un cliente/módulo por canal en `lib/` (p.ej. `lib/gsc.ts`, `lib/ga4.ts`, `lib/bing.ts`, `lib/hubspot.ts`, `lib/ai-visibility.ts`), cada uno con su credencial en env vars propias de Netlify. El stub `lib/supermetrics.ts` **no se usa** para SEO.
 
 La función de cruce es la misma "puerta de canal" que el paid: `original_source ∈ {ORGANIC_SEARCH, AI_REFERRALS}`. Mientras HubSpot siga bloqueado, el bloque de lead status/pipeline funciona con mock realista (igual que `mockHeatContacts`).
 
@@ -89,6 +93,20 @@ export type SeoPage = {
   country: string; month: string;
 };
 
+// Motor de IA rastreado — Copilot es el prioritario (mayoría de clientes lo usan; se nutre de Bing)
+export type AiEngine = "copilot" | "chatgpt" | "perplexity" | "gemini";
+
+// Un prompt estratégico y su resultado por motor — banco de prompts → cita (AEO)
+export type AiVisibilityPrompt = {
+  prompt: string;
+  engine: AiEngine;
+  appearsDcycle: boolean;
+  citedUrl: string | null;   // URL que citó el motor (o null si no aparece ninguna)
+  competitorsCited: string[];
+  country: string; month: string;
+};
+// gap: si appearsDcycle es false, o citedUrl no es una página transaccional propia.
+
 // Solicitante de demo orgánica — base del tracking de lead status
 export type OrganicDemoLead = {
   email: string; company: string;
@@ -102,7 +120,7 @@ export type OrganicDemoLead = {
 };
 ```
 
-Helpers en `lib/seo.ts`: `filterSeo(rows, {country, month})`, `topUrls(pages)`, `keywordGap(kw)` (`rankingUrl !== targetUrl`), `countOrganicDemos(leads, filters)`, `funnelByStatus(leads)`, `pipelineFromDemos(leads)`. Reutilizar formateadores de `lib/kpis.ts` (`fmtEur`, `fmtNum`, `fmtPct`). Constante `LEAD_STATUSES` con el orden del embudo.
+Helpers en `lib/seo.ts`: `filterSeo(rows, {country, month})`, `topUrls(pages)`, `keywordGap(kw)` (`rankingUrl !== targetUrl`), `countOrganicDemos(leads, filters)`, `funnelByStatus(leads)`, `pipelineFromDemos(leads)`, `aiVisibilityByEngine(prompts)` (% `appearsDcycle` por `engine`, Copilot primero), `aiShareOfVoice(prompts)` (Dcycle vs `competitorsCited`), `aiCitationGaps(prompts)` (prompts donde `appearsDcycle` es `false`). Reutilizar formateadores de `lib/kpis.ts` (`fmtEur`, `fmtNum`, `fmtPct`). Constantes `LEAD_STATUSES` (orden del embudo) y `AI_ENGINES` (orden de prioridad: Copilot, ChatGPT, Perplexity, Gemini).
 
 Objetivo de demos orgánicas — añadir a `lib/mock-data.ts` junto a `mockForecast`:
 ```ts
@@ -125,7 +143,10 @@ Reescribir `app/organic/page.tsx` como client component (`"use client"`) con `us
 4. ★ **Páginas transaccionales por keyword** — tabla `keyword | intención | página objetivo | URL que rankea | posición | demos`, resaltando filas con *gap* (`rankingUrl !== targetUrl`).
 5. ★ **URLs mejor posicionadas** — tabla ordenable por posición / clics / impresiones + demos por URL.
 6. ★ **Lead status de demos orgánicas** — embudo por estado (reutilizar visual del embudo de `app/campaign-detail/page.tsx:100`) + tabla de contactos con **lead status editable** (select), persistido en localStorage (patrón de tags en campaign-detail).
-7. **AEO + Bing** — mantener el bloque actual.
+7. **AEO — visibilidad en Copilot y otros motores IA** — reemplaza el bloque genérico actual:
+   - KPIs por motor (`aiVisibilityByEngine`), Copilot primero, con su Share of Voice.
+   - ★ **Banco de prompts → cita**: tabla `prompt | motor | ¿aparece Dcycle? | URL citada | competidores`, resaltando filas sin cita (gap).
+   - Bloque Bing WMT (impresiones/clics/posición) como salud técnica de indexación para Copilot.
 
 Reutilizar componentes existentes: `Panel`/`PageHeader` (`components/Page.tsx`), `FilterBar`, embudo de campaign-detail, formateadores de `kpis.ts`. No introducir librerías nuevas.
 
@@ -133,18 +154,18 @@ Reutilizar componentes existentes: `Panel`/`PageHeader` (`components/Page.tsx`),
 
 ## Archivos a crear / modificar
 
-- **Crear** `lib/seo.ts` — tipos (`SeoKeyword`, `SeoPage`, `OrganicDemoLead`, `Intent`), helpers y `LEAD_STATUSES`.
-- **Modificar** `lib/mock-data.ts` — añadir mocks (`mockSeoKeywords`, `mockSeoPages`, `mockOrganicDemoLeads`, `mockOrganicDemoTargets`) y `ORGANIC_TARGET_KEY`. Mantener `mockSeoKpis`/`mockAeoKpis` o derivarlos.
+- **Crear** `lib/seo.ts` — tipos (`SeoKeyword`, `SeoPage`, `OrganicDemoLead`, `Intent`, `AiEngine`, `AiVisibilityPrompt`), helpers y `LEAD_STATUSES`/`AI_ENGINES`.
+- **Modificar** `lib/mock-data.ts` — añadir mocks (`mockSeoKeywords`, `mockSeoPages`, `mockOrganicDemoLeads`, `mockOrganicDemoTargets`, `mockAiVisibilityPrompts`) y `ORGANIC_TARGET_KEY`. Mantener `mockSeoKpis` o derivarlo; **sustituir `mockAeoKpis`** por el banco de prompts por motor.
 - **Reescribir** `app/organic/page.tsx` — client component con las 7 secciones.
-- **Modificar** `docs/CONEXIONES.md` y `docs/BRIEF.md` §10 — añadir filas de medición (keyword→página, demos orgánicas, lead status, target) y settings de GSC/GA4/Bing para SEO.
+- **Modificar** `docs/CONEXIONES.md` y `docs/BRIEF.md` §10 — añadir filas de medición (keyword→página, demos orgánicas, lead status, target, banco de prompts por motor) y settings de GSC/GA4/Bing/AI-visibility para SEO/AEO.
 
 ## Pasos de implementación
 
-1. `lib/seo.ts` con tipos + helpers + `LEAD_STATUSES` (reusando `ChannelMetrics`/formateadores de `kpis.ts`).
-2. Mocks realistas en `lib/mock-data.ts` (keywords con casos de *gap*, URLs top, ~6 leads con estados variados, targets por mes/país).
-3. Reescribir `app/organic/page.tsx` sección a sección (filtros → KPIs → objetivo → keyword/página → URLs → lead status → AEO).
+1. `lib/seo.ts` con tipos + helpers + `LEAD_STATUSES`/`AI_ENGINES` (reusando `ChannelMetrics`/formateadores de `kpis.ts`).
+2. Mocks realistas en `lib/mock-data.ts` (keywords con casos de *gap*, URLs top, ~6 leads con estados variados, targets por mes/país, ~8-10 prompts estratégicos con resultado por motor, Copilot con más filas que el resto).
+3. Reescribir `app/organic/page.tsx` sección a sección (filtros → KPIs → objetivo → keyword/página → URLs → lead status → AEO por motor).
 4. Cablear `useLocalState` para objetivo editable y lead status editable.
-5. Actualizar docs (CONEXIONES/BRIEF) con el framework de medición y los settings de las 3 fuentes.
+5. Actualizar docs (CONEXIONES/BRIEF) con el framework de medición y los settings de las 4 fuentes (GSC/GA4/Bing/AI-visibility).
 
 ## Verificación
 

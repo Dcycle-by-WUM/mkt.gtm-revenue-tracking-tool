@@ -21,6 +21,12 @@ export const MONTHS = ["2026-04", "2026-05", "2026-06"] as const;
 export const CHANNELS: Channel[] = ["LinkedIn", "Google"];
 export const NO_COUNTRY = "Sin país / Multi";
 
+// Mes anterior dentro de MONTHS (para tablas comparativas periodo vs periodo).
+export function prevMonth(month: string): string | null {
+  const i = MONTHS.indexOf(month as (typeof MONTHS)[number]);
+  return i > 0 ? MONTHS[i - 1] : null;
+}
+
 type BaseCampaign = Omit<CampaignRow, "month">;
 
 const baseCampaigns: BaseCampaign[] = [
@@ -198,17 +204,126 @@ export const mockHeatContacts: HeatContact[] = [
   { email: "ana@verderetail.es", company: "Verde Retail", jobTitle: "Marketing Lead", country: "ES", ownerSdr: "Paula", numConversionEvents: 4, recentConversionDate: "2026-04-02", recentConversionEventName: "Calculadora HdC", firstConversionEventName: "Calculadora HdC", emailLastOpenDate: "2026-04-01", emailOpen: 2, emailClick: 0, emailReplied: 0, pageViews: 3, linkedinEngagement: null, lifecycleStage: "lead", leadStatus: "NEW", emailOptout: false, numContactedNotes: 0 },
 ];
 
-export const mockSeoKpis = [
-  { kpi: "Tráfico orgánico non-branded", value: "18.420 sesiones", source: "GSC + GA4" },
-  { kpi: "Domain Authority (DA)", value: "47 (+2)", source: "Moz/Ahrefs" },
-  { kpi: "Keywords estratégicas en Top 3", value: "34", source: "GSC / rank tracker" },
-  { kpi: "Leads orgánicos (MQL)", value: "61", source: "HubSpot" },
-  { kpi: "Pipeline SEO €", value: "72.000 €", source: "HubSpot" },
+// ── SEO orgánico + AEO (Brief §10, docs/SEO-ORGANICO.md) ────────
+// DA/Domain Authority sigue como KPI aparte (herramienta a confirmar, §12);
+// el resto sale de conectores nativos GSC/GA4/Bing + HubSpot (no Supermetrics).
+import type { Intent, SeoKeyword, SeoPage, AiEngine, AiVisibilityPrompt, OrganicDemoLead } from "./seo";
+
+export const mockDomainAuthority = { value: 47, delta: 2, source: "Moz/Ahrefs (herramienta a confirmar, §12)" };
+
+// Keywords estratégicas × 3 meses (posición mejorando abr→jun para narrativa demo).
+const seoKeywordBase: {
+  keyword: string; intent: Intent; targetUrl: string; rankingUrl: string;
+  isBranded: boolean; isStrategic: boolean; country: string;
+  position: [number, number, number]; clicks: [number, number, number];
+  impressions: [number, number, number]; organicDemos: [number, number, number];
+}[] = [
+  { keyword: "software gestión huella de carbono", intent: "transactional", targetUrl: "/producto", rankingUrl: "/producto", isBranded: false, isStrategic: true, country: "ES", position: [4.1, 3.2, 2.4], clicks: [420, 510, 610], impressions: [9800, 10400, 11200], organicDemos: [4, 6, 8] },
+  { keyword: "calculadora de huella de carbono", intent: "transactional", targetUrl: "/pricing", rankingUrl: "/blog/que-es-huella-de-carbono", isBranded: false, isStrategic: true, country: "ES", position: [5.0, 4.6, 4.1], clicks: [720, 810, 890], impressions: [19500, 20200, 21000], organicDemos: [1, 1, 2] },
+  { keyword: "software doble materialidad", intent: "transactional", targetUrl: "/producto/doble-materialidad", rankingUrl: "/blog/doble-materialidad-guia", isBranded: false, isStrategic: true, country: "UK", position: [8.4, 7.5, 6.8], clicks: [180, 220, 260], impressions: [6800, 7100, 7500], organicDemos: [0, 1, 1] },
+  { keyword: "dcycle", intent: "branded", targetUrl: "/", rankingUrl: "/", isBranded: true, isStrategic: false, country: "ES", position: [1.1, 1.0, 1.0], clicks: [1900, 2050, 2200], impressions: [2400, 2500, 2600], organicDemos: [9, 10, 12] },
+  { keyword: "software reporting csrd", intent: "transactional", targetUrl: "/producto/csrd", rankingUrl: "/producto/csrd", isBranded: false, isStrategic: true, country: "UK", position: [4.0, 3.6, 3.2], clicks: [210, 260, 300], impressions: [6100, 6600, 7000], organicDemos: [2, 3, 5] },
+  { keyword: "alcance 3 emisiones software", intent: "informational", targetUrl: "/producto", rankingUrl: "/blog/alcance-3-que-es", isBranded: false, isStrategic: true, country: "DE", position: [5.9, 5.7, 5.5], clicks: [310, 330, 350], impressions: [8900, 9100, 9300], organicDemos: [0, 0, 1] },
 ];
-export const mockAeoKpis = [
-  { kpi: "AI Visibility", value: "23 %", source: "Plataforma AI-visibility" },
-  { kpi: "AI Share of Voice", value: "12 %", source: "Plataforma AI-visibility" },
-  { kpi: "Leads desde IA (AI_REFERRALS)", value: "14", source: "HubSpot" },
-  { kpi: "Pipeline desde IA €", value: "21.000 €", source: "HubSpot" },
-  { kpi: "Bing — impresiones", value: "44.100", source: "Bing WMT" },
+export const mockSeoKeywords: SeoKeyword[] = seoKeywordBase.flatMap((k) =>
+  MONTHS.map((month, i) => ({
+    keyword: k.keyword, intent: k.intent, targetUrl: k.targetUrl, rankingUrl: k.rankingUrl,
+    position: k.position[i], clicks: k.clicks[i], impressions: k.impressions[i], organicDemos: k.organicDemos[i],
+    isBranded: k.isBranded, isStrategic: k.isStrategic, country: k.country, month,
+  })),
+);
+
+// URLs/landings con su rendimiento orgánico × 3 meses.
+const seoPageBase: {
+  url: string; isTransactional: boolean; country: string;
+  position: [number, number, number]; clicks: [number, number, number];
+  impressions: [number, number, number]; organicSessions: [number, number, number]; organicDemos: [number, number, number];
+}[] = [
+  { url: "/producto", isTransactional: true, country: "ES", position: [3.8, 3.1, 2.4], clicks: [420, 510, 610], impressions: [9800, 10400, 11200], organicSessions: [380, 460, 540], organicDemos: [4, 6, 8] },
+  { url: "/producto/csrd", isTransactional: true, country: "UK", position: [4.5, 3.9, 3.2], clicks: [210, 260, 300], impressions: [6100, 6600, 7000], organicSessions: [190, 230, 270], organicDemos: [2, 3, 5] },
+  { url: "/pricing", isTransactional: true, country: "ES", position: [6.2, 5.4, 4.6], clicks: [150, 180, 210], impressions: [4200, 4500, 4900], organicSessions: [140, 165, 190], organicDemos: [3, 4, 5] },
+  { url: "/blog/que-es-huella-de-carbono", isTransactional: false, country: "ES", position: [3.9, 4.0, 4.1], clicks: [890, 910, 930], impressions: [21000, 21500, 22000], organicSessions: [820, 840, 860], organicDemos: [1, 1, 2] },
+  { url: "/blog/doble-materialidad-guia", isTransactional: false, country: "UK", position: [7.1, 6.9, 6.8], clicks: [240, 250, 260], impressions: [7200, 7300, 7500], organicSessions: [210, 220, 230], organicDemos: [0, 1, 1] },
+  { url: "/producto/doble-materialidad", isTransactional: true, country: "UK", position: [9.5, 8.2, 6.8], clicks: [60, 80, 110], impressions: [2100, 2400, 2800], organicSessions: [55, 72, 98], organicDemos: [0, 1, 2] },
 ];
+export const mockSeoPages: SeoPage[] = seoPageBase.flatMap((p) =>
+  MONTHS.map((month, i) => ({
+    url: p.url, isTransactional: p.isTransactional, position: p.position[i], clicks: p.clicks[i],
+    impressions: p.impressions[i], organicSessions: p.organicSessions[i], organicDemos: p.organicDemos[i],
+    country: p.country, month,
+  })),
+);
+
+// Banco de prompts estratégicos → cita, por motor. Copilot prioritario (motor
+// que usan la mayoría de clientes Dcycle; se nutre del índice de Bing).
+const aiPromptBase: {
+  prompt: string; engine: AiEngine; country: string;
+  appearsDcycle: [boolean, boolean, boolean];
+  citedUrl: [string | null, string | null, string | null];
+  competitorsCited: [string[], string[], string[]];
+}[] = [
+  { prompt: "mejor software de huella de carbono para empresas", engine: "copilot", country: "ES",
+    appearsDcycle: [false, true, true], citedUrl: [null, "dcycle.io/producto", "dcycle.io/producto"],
+    competitorsCited: [["Persefoni", "Watershed"], ["Persefoni"], ["Persefoni"]] },
+  { prompt: "software reporting CSRD recomendado", engine: "copilot", country: "UK",
+    appearsDcycle: [false, false, true], citedUrl: [null, null, "dcycle.io/producto/csrd"],
+    competitorsCited: [["Sphera", "Watershed"], ["Sphera", "Watershed"], ["Sphera"]] },
+  { prompt: "herramientas para calcular alcance 3 (scope 3)", engine: "copilot", country: "ES",
+    appearsDcycle: [true, true, true], citedUrl: ["dcycle.io/blog/alcance-3-que-es", "dcycle.io/blog/alcance-3-que-es", "dcycle.io/producto"],
+    competitorsCited: [["Watershed"], [], []] },
+  { prompt: "software doble materialidad CSRD", engine: "copilot", country: "DE",
+    appearsDcycle: [false, false, false], citedUrl: [null, null, null],
+    competitorsCited: [["Sphera", "Persefoni"], ["Sphera", "Persefoni"], ["Sphera"]] },
+  { prompt: "best carbon accounting software for enterprise", engine: "chatgpt", country: "UK",
+    appearsDcycle: [false, true, true], citedUrl: [null, "dcycle.io/producto", "dcycle.io/producto"],
+    competitorsCited: [["Watershed", "Persefoni"], ["Watershed"], ["Watershed"]] },
+  { prompt: "CSRD reporting software comparison", engine: "chatgpt", country: "UK",
+    appearsDcycle: [false, false, false], citedUrl: [null, null, null],
+    competitorsCited: [["Sphera", "Workiva"], ["Sphera", "Workiva"], ["Workiva"]] },
+  { prompt: "mejor software huella de carbono", engine: "perplexity", country: "ES",
+    appearsDcycle: [true, true, true], citedUrl: ["dcycle.io/producto", "dcycle.io/producto", "dcycle.io/producto"],
+    competitorsCited: [["Persefoni"], ["Persefoni"], []] },
+  { prompt: "double materiality assessment tools", engine: "perplexity", country: "DE",
+    appearsDcycle: [false, false, true], citedUrl: [null, null, "dcycle.io/producto/doble-materialidad"],
+    competitorsCited: [["Sphera"], ["Sphera"], ["Sphera"]] },
+  { prompt: "carbon footprint software for SMEs", engine: "gemini", country: "ES",
+    appearsDcycle: [false, false, false], citedUrl: [null, null, null],
+    competitorsCited: [["Watershed", "Persefoni"], ["Watershed"], ["Watershed"]] },
+];
+export const mockAiVisibilityPrompts: AiVisibilityPrompt[] = aiPromptBase.flatMap((p) =>
+  MONTHS.map((month, i) => ({
+    prompt: p.prompt, engine: p.engine, appearsDcycle: p.appearsDcycle[i], citedUrl: p.citedUrl[i],
+    competitorsCited: p.competitorsCited[i], country: p.country, month,
+  })),
+);
+
+// Bing WMT — salud técnica de indexación (proxy de visibilidad en Copilot,
+// que se nutre del índice de Bing).
+export type BingSummary = { country: string; month: string; impressions: number; clicks: number; position: number };
+const bingBase: { country: string; impressions: [number, number, number]; clicks: [number, number, number]; position: [number, number, number] }[] = [
+  { country: "ES", impressions: [38000, 41200, 44100], clicks: [1800, 2100, 2450], position: [9.8, 8.9, 8.1] },
+  { country: "UK", impressions: [21000, 22800, 24500], clicks: [980, 1120, 1300], position: [11.2, 10.4, 9.6] },
+  { country: "DE", impressions: [9800, 10500, 11200], clicks: [410, 460, 510], position: [13.5, 12.8, 12.1] },
+];
+export const mockBingSummary: BingSummary[] = bingBase.flatMap((b) =>
+  MONTHS.map((month, i) => ({ country: b.country, month, impressions: b.impressions[i], clicks: b.clicks[i], position: b.position[i] })),
+);
+
+// Solicitantes de demo orgánica (SEO + AI_REFERRALS) — base del lead status.
+export const mockOrganicDemoLeads: OrganicDemoLead[] = [
+  { email: "irene@greenbuild.es", company: "GreenBuild", source: "ORGANIC_SEARCH", entryKeyword: "software gestión huella de carbono", landingPage: "/producto", requestDate: "2026-06-10", leadStatus: "SQL", isMql: true, dealAmount: 32000, dealStage: "Propuesta enviada", ownerSdr: "Juanjo", country: "ES", month: "2026-06" },
+  { email: "tom@northgrid.co.uk", company: "NorthGrid", source: "ORGANIC_SEARCH", entryKeyword: "software reporting csrd", landingPage: "/producto/csrd", requestDate: "2026-06-08", leadStatus: "MQL", isMql: true, dealAmount: 0, dealStage: "—", ownerSdr: "Paula", country: "UK", month: "2026-06" },
+  { email: "petra@solarmax.de", company: "SolarMax", source: "AI_REFERRALS", entryKeyword: "software doble materialidad CSRD (Copilot)", landingPage: "/producto/doble-materialidad", requestDate: "2026-06-05", leadStatus: "NEW", isMql: false, dealAmount: 0, dealStage: "—", ownerSdr: "Juanjo", country: "DE", month: "2026-06" },
+  { email: "marc@fintrail.es", company: "FinTrail", source: "AI_REFERRALS", entryKeyword: "mejor software de huella de carbono (Copilot)", landingPage: "/producto", requestDate: "2026-05-22", leadStatus: "PIPELINE", isMql: true, dealAmount: 48000, dealStage: "Negociación", ownerSdr: "Paula", country: "ES", month: "2026-05" },
+  { email: "helen@bridgeworks.co.uk", company: "Bridgeworks", source: "ORGANIC_SEARCH", entryKeyword: "software doble materialidad", landingPage: "/blog/doble-materialidad-guia", requestDate: "2026-05-15", leadStatus: "CLOSED_WON", isMql: true, dealAmount: 61000, dealStage: "Closed Won", ownerSdr: "Juanjo", country: "UK", month: "2026-05" },
+  { email: "nora@ecoparts.es", company: "EcoParts", source: "ORGANIC_SEARCH", entryKeyword: "calculadora de huella de carbono", landingPage: "/blog/que-es-huella-de-carbono", requestDate: "2026-04-18", leadStatus: "NEW", isMql: false, dealAmount: 0, dealStage: "—", ownerSdr: "Paula", country: "ES", month: "2026-04" },
+];
+
+// Objetivo de demos orgánicas (target vs real) — solo el target es editable.
+export type OrganicDemoTarget = { month: string; country: string; targetDemos: number };
+export const mockOrganicDemoTargets: OrganicDemoTarget[] = [
+  { month: "2026-06", country: "ES", targetDemos: 10 },
+  { month: "2026-06", country: "UK", targetDemos: 6 },
+  { month: "2026-06", country: "DE", targetDemos: 3 },
+];
+export const ORGANIC_TARGET_KEY = "gtm.organicDemoTargets.v1";

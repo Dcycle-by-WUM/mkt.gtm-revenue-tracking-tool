@@ -210,14 +210,18 @@ Puntúa la "temperatura" de un contacto antes de pedir demo, combinando señales
 | **Pipeline SEO (€)** | Suma `amount` de deals de contactos orgánicos | HubSpot |
 
 ### 10.2 AEO (Answer Engine Optimization) — KPIs y fuentes
+
+> **Prioridad: Microsoft Copilot.** La mayoría de clientes de Dcycle usan Copilot, y **Copilot se nutre del índice de Bing** (grounding web vía Bing Search) — a diferencia de ChatGPT/Perplexity, que rastrean con sus propios bots (GPTBot, PerplexityBot). Esto convierte a **Bing Webmaster Tools** en la palanca técnica más directa para la visibilidad en Copilot, no solo en "un bloque más" de AEO.
+
 | KPI | Definición | Fuente |
 | --- | --- | --- |
-| **AI Visibility** | % de prompts estratégicos donde aparece Dcycle | Plataforma AI-visibility (Profound/Peec/Otterly/Semrush AI) |
-| **AI Share of Voice** | Cuota de aparición vs competidores en esos prompts | Plataforma AI-visibility |
+| **AI Visibility por motor** | % de prompts estratégicos donde aparece Dcycle, **desglosado por motor** (Copilot primero; luego ChatGPT/Perplexity/Gemini) | Plataforma AI-visibility (Profound/Peec/Otterly/Semrush AI) — **debe soportar Copilot explícitamente** |
+| **AI Share of Voice** | Cuota de aparición vs competidores en esos prompts, por motor | Plataforma AI-visibility |
+| **Copilot — indexación/salud Bing** | Impresiones/clics/queries/posición en Bing orgánico (proxy técnico de indexación para Copilot) | Bing Webmaster Tools |
+| **Banco de prompts → cita** | Prompt estratégico → ¿aparece Dcycle? → URL citada (o ninguna) → competidores citados — mismo patrón *gap* que keyword→página en SEO | Plataforma AI-visibility (por motor) |
 | **Leads / Pipeline desde IA (€)** | Contactos/deals con `original_source = AI_REFERRALS` | HubSpot |
-| **Bing** | Impresiones/clics/queries/posición (alimenta respuestas IA) | Bing Webmaster Tools (Supermetrics) |
 
-> Requiere **dos fuentes nuevas a confirmar** (§12): (a) herramienta SEO para DA/rankings, (b) plataforma de AI-visibility para prompts/share of voice. El resto sale de GSC/Bing/GA (Supermetrics) + HubSpot, cruzado por la misma puerta de canal (`original_source`) que el paid. Tanto SEO como AEO conectan hasta **pipeline € y deals** (no se quedan en métricas de tráfico).
+> Requiere **dos fuentes nuevas a confirmar** (§12): (a) herramienta SEO para DA/rankings, (b) plataforma de AI-visibility para prompts/share of voice — **con soporte de Copilot como criterio obligatorio de selección**, a verificar en la documentación vigente de cada proveedor (espacio que cambia rápido). El resto sale de GSC/Bing/GA (Supermetrics) + HubSpot, cruzado por la misma puerta de canal (`original_source`) que el paid. Tanto SEO como AEO conectan hasta **pipeline € y deals** (no se quedan en métricas de tráfico).
 
 ---
 
@@ -243,7 +247,7 @@ Puntúa la "temperatura" de un contacto antes de pedir demo, combinando señales
 7. **Pesos Heat Score** — versión inicial = la de §9; ajustables en Admin.
 8. **Alcance orgánico/AEO v2** — métricas y cruce GSC/Bing/GA/AI.
 9. **Herramienta SEO** para Domain Authority y rankings (Moz / Ahrefs / Semrush) — definir cuál y si está disponible vía Supermetrics o por su propia API.
-10. **Plataforma de AI-visibility** para AI Visibility / Share of Voice (Profound, Peec AI, Otterly, Semrush AI Toolkit…) — definir cuál y lista de prompts estratégicos + competidores a monitorizar.
+10. **Plataforma de AI-visibility** para AI Visibility / Share of Voice (Profound, Peec AI, Otterly, Semrush AI Toolkit…) — definir cuál y lista de prompts estratégicos + competidores a monitorizar. **Criterio obligatorio: soporte explícito de Microsoft Copilot** (motor prioritario, la mayoría de clientes lo usan).
 11. **Hosting confirmado: Netlify** (sustituye a Vercel) — confirmar que Netlify Scheduled Functions cubre los jobs de ingesta, o mover los crons a Supabase scheduled functions.
 
 ---
@@ -252,7 +256,7 @@ Puntúa la "temperatura" de un contacto antes de pedir demo, combinando señales
 
 - **Fuzzy match:** coincidencia *aproximada* por similitud textual (trigram/Levenshtein), no exacta. Aquí solo red de seguridad (el match exacto funciona casi siempre).
 - **Campaign Group (grupo de campañas):** agrupador de LinkedIn que contiene varias campañas; el **país/territorio se atribuye por el grupo**, no por la campaña.
-- **AEO (Answer Engine Optimization):** optimización/medición de visibilidad en motores de respuesta IA (ChatGPT, Perplexity…); aquí se rastrea vía `AI_REFERRALS` + Bing.
+- **AEO (Answer Engine Optimization):** optimización/medición de visibilidad en motores de respuesta IA. Motor prioritario: **Microsoft Copilot** (mayoría de clientes Dcycle; se nutre del índice de Bing, de ahí que Bing WMT sea clave técnica). También ChatGPT/Perplexity/Gemini. Se rastrea vía `AI_REFERRALS` + Bing + plataforma de AI-visibility (por motor).
 - **Heat Score:** puntuación 0–100 de intención de un contacto pre-demo (señales × recencia), clasificada en 🔥/⚡/🌱/❄️.
 
 ---
