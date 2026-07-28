@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, Check, AlertTriangle } from "lucide-react";
+import { RefreshCw, Check, AlertTriangle, X } from "lucide-react";
 
 type Status =
   | { kind: "idle" }
@@ -12,8 +12,8 @@ type Status =
   | { kind: "error"; msg: string };
 
 // Botón "Actualizar HubSpot" → dispara el sync CRM bajo demanda
-// (POST /api/refresh-crm) en vez de esperar al cron horario. Muestra estado de
-// carga y un feedback breve. `compact` = solo icono (para el Topbar).
+// (POST /api/refresh-crm) en vez de esperar al cron horario. Muestra un
+// mensaje DEBAJO: "Actualizando…" mientras corre y el resultado al terminar.
 export function RefreshHubspotButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -35,14 +35,12 @@ export function RefreshHubspotButton({ compact = false }: { compact?: boolean })
     } catch (e) {
       setStatus({ kind: "error", msg: e instanceof Error ? e.message : "Error de red" });
     }
-    // El mensaje de resultado se desvanece; el botón vuelve a "idle".
-    setTimeout(() => setStatus((s) => (s.kind === "loading" ? s : { kind: "idle" })), 6000);
   }
 
   const loading = status.kind === "loading";
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="relative">
       <button
         onClick={refresh}
         disabled={loading}
@@ -50,26 +48,63 @@ export function RefreshHubspotButton({ compact = false }: { compact?: boolean })
         className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand)] px-3 py-2 text-sm font-medium text-[var(--brand-contrast)] transition-colors hover:bg-[var(--brand-hover)] disabled:opacity-60"
       >
         <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        {!compact && <span>{loading ? "Actualizando…" : "Actualizar HubSpot"}</span>}
+        {!compact && <span>Actualizar HubSpot</span>}
       </button>
 
-      {status.kind === "ok" && (
-        <span className="inline-flex items-center gap-1 rounded-md bg-[var(--good-bg)] px-2 py-1 text-xs font-medium text-[var(--good-text)]">
-          <Check className="h-3.5 w-3.5" /> {status.total} filas actualizadas
-        </span>
-      )}
-      {status.kind === "skipped" && (
-        <span className="inline-flex items-center gap-1 rounded-md bg-[var(--warn-bg)] px-2 py-1 text-xs font-medium text-[var(--warn-text)]">
-          <AlertTriangle className="h-3.5 w-3.5" /> HubSpot no conectado
-        </span>
-      )}
-      {status.kind === "error" && (
-        <span
-          title={status.msg}
-          className="inline-flex max-w-[220px] items-center gap-1 truncate rounded-md bg-[var(--error-bg)] px-2 py-1 text-xs font-medium text-[var(--error-text)]"
-        >
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {status.msg}
-        </span>
+      {/* Mensaje de estado debajo del botón */}
+      {status.kind !== "idle" && (
+        <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 text-sm shadow-[var(--shadow-lg)]">
+          {status.kind !== "loading" && (
+            <button
+              onClick={() => setStatus({ kind: "idle" })}
+              className="absolute right-2 top-2 text-[var(--faint)] hover:text-[var(--text)]"
+              aria-label="Cerrar"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {status.kind === "loading" && (
+            <div className="flex items-center gap-2 text-[var(--text-secondary)]">
+              <RefreshCw className="h-4 w-4 animate-spin text-[var(--brand)]" />
+              <span>Actualizando datos de HubSpot…</span>
+            </div>
+          )}
+
+          {status.kind === "ok" && (
+            <div className="flex items-start gap-2 text-[var(--good-text)]">
+              <Check className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <div className="font-medium">Actualización completada</div>
+                <div className="text-xs text-[var(--muted)]">
+                  {status.total} filas sincronizadas desde HubSpot.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {status.kind === "skipped" && (
+            <div className="flex items-start gap-2 text-[var(--warn-text)]">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <div className="font-medium">HubSpot no conectado</div>
+                <div className="text-xs text-[var(--muted)]">
+                  Falta la credencial en el entorno. Al configurarla, el botón traerá los datos al vuelo.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {status.kind === "error" && (
+            <div className="flex items-start gap-2 text-[var(--error-text)]">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <div className="font-medium">No se pudo actualizar</div>
+                <div className="break-words text-xs text-[var(--muted)]">{status.msg}</div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

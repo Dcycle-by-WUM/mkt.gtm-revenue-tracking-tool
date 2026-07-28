@@ -33,7 +33,7 @@ export default function RootLayout({
           <div className="flex min-w-0 flex-1 flex-col">
             <Topbar />
             <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
-              <div className="mx-auto max-w-[1400px]">{children}</div>
+              <div className="mx-auto w-full max-w-[1760px]">{children}</div>
             </main>
           </div>
         </div>

@@ -93,7 +93,7 @@
   --good-bg: #ebfafb;   --good-text: #007d85;  --good-solid: #009ca6;  --good-border: #b3e6e9;
   --warn-bg: #fff3ea;   --warn-text: #b93815;  --warn-solid: #ff7629;  --warn-border: #ffd6b8;
   --error-bg: #ffeaf4;  --error-text: #c11574; --error-solid: #ff2990; --error-border: #ffcce4;
-  --info-bg: #eff1fe;   --info-text: #1f37cc;  --info-solid: #2945ff;  --info-border: #ced2fa;
+  --info-bg: #eff6ff;   --info-text: #1d4ed8;  --info-solid: #3b82f6;  --info-border: #bfdbfe;
 
   /* Dataviz — paleta categórica exacta de dcycle (iso14064). */
   --chart-1: #2945ff;   /* azul     */
@@ -116,9 +116,16 @@ body {
   /* Inter se inyecta vía next/font en layout.tsx (--font-inter) — misma
      tipografía que el front de dcycle. */
   font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;   /* firma tipográfica exacta de dcycle */
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Titulares algo más ceñidos, como en dcycle. */
+h1, h2, h3 {
+  letter-spacing: -0.03em;
+  line-height: 1.15;
 }
 
 ::selection {

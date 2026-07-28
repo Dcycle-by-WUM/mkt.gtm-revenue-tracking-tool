@@ -109,9 +109,9 @@ function ThRight({ label, help }: { label: string; help: string }) {
 function DeltaBadge({ pct }: { pct: number | null }) {
   if (pct === null) return <span className="text-xs text-[var(--muted)]">—</span>;
   const cls =
-    pct >= 1
+    pct >= 0.9
       ? "bg-[var(--good-bg)] text-[var(--good-text)]"
-      : pct >= 0.85
+      : pct >= 0.7
         ? "bg-[var(--warn-bg)] text-[var(--warn-text)]"
         : "bg-[var(--error-bg)] text-[var(--error-text)]";
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{fmtPct(pct)}</span>;
@@ -138,12 +138,14 @@ function PacingBar({
     pct === null
       ? "bg-[var(--border)]"
       : mode === "spend"
-        ? pct > 1
+        ? pct > 1.1
           ? "bg-[var(--error-solid)]"
-          : "bg-[var(--good-solid)]"
-        : pct >= 1
+          : pct > 1
+            ? "bg-[var(--warn-solid)]"
+            : "bg-[var(--good-solid)]"
+        : pct >= 0.95
           ? "bg-[var(--good-solid)]"
-          : pct >= 0.85
+          : pct >= 0.7
             ? "bg-[var(--warn-solid)]"
             : "bg-[var(--error-solid)]";
   return (
@@ -193,10 +195,10 @@ function ScopeTable({
           <thead className="bg-[var(--subtle)] text-left text-[11px] uppercase text-[var(--muted)]">
             <tr>
               <th className="px-3 py-2">Canal</th>
-              <ThRight label="Spend Obj" help="Objetivo de inversión, editable aquí. Se guarda en Supabase." />
+              <th className="px-3 py-2 text-right">Spend Obj</th>
               <ThRight label="Spend Actual" help="Inversión real de paid media (LinkedIn+Google) vía Supermetrics. En el mes en curso, proyectada a fin de mes." />
               <th className="px-3 py-2 text-right">Δ</th>
-              <ThRight label="Pipeline Obj" help="Objetivo de pipeline €, editable aquí. Se guarda en Supabase." />
+              <th className="px-3 py-2 text-right">Pipeline Obj</th>
               <ThRight label="Pipeline Actual" help="Pipeline € real de deals atribuidos (HubSpot), por utm_campaign. En el mes en curso, proyectado a fin de mes." />
               <th className="px-3 py-2 text-right">Δ</th>
             </tr>

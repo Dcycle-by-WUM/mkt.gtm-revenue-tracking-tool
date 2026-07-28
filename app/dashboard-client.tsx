@@ -105,23 +105,18 @@ export function DashboardClient({
           label="Pipeline generado"
           value={fmtEur(t.pipeline)}
           help={SRC.pipeline}
-          tone="brand"
           icon={<TrendingUp className="h-4 w-4" />}
           hint={targetPipeline > 0 ? `Obj ${fmtEur(targetPipeline)} · ${fmtPct(pipelinePace)}` : undefined}
         />
         <Stat
           label="ROI"
           value={fmtPct(roi(t))}
-          help={SRC.roi}
-          tone={roi(t) !== null && roi(t)! >= 0 ? "good" : "error"}
           icon={<Target className="h-4 w-4" />}
           hint="Pipeline € por € invertido"
         />
         <Stat
           label="Closed Won"
           value={fmtEur(t.closedWon)}
-          help={SRC.won}
-          tone="good"
           icon={<Trophy className="h-4 w-4" />}
         />
       </div>
@@ -138,10 +133,11 @@ export function DashboardClient({
 
         <div className="card p-5">
           <h3 className="mb-4 text-sm font-semibold">Ritmo vs objetivo</h3>
-          <PaceRow label="Pipeline" pct={pipelinePace} good />
-          <PaceRow label="Inversión" pct={spendPace} good={false} />
+          <PaceRow label="Pipeline" actual={t.pipeline} target={targetPipeline} mode="pipeline" />
+          <PaceRow label="Inversión" actual={t.spend} target={targetSpend} mode="spend" />
           <p className="mt-3 text-xs text-[var(--muted)]">
-            Pipeline: cuanto más alto mejor. Inversión: pasar del 100% es sobrecoste.
+            La línea marca el objetivo. Pipeline: cuanto más cerca o por encima, mejor.
+            Inversión: pasar de la línea es sobrecoste.
           </p>
         </div>
       </div>
@@ -262,28 +258,70 @@ function FunnelBar({ t }: { t: ReturnType<typeof sumMetrics> }) {
   );
 }
 
-function PaceRow({ label, pct, good }: { label: string; pct: number | null; good: boolean }) {
-  const width = pct === null ? 0 : Math.min(pct, 1) * 100;
-  const cls =
+// Barra de ritmo con marca de objetivo. La escala llega al 125% del objetivo,
+// con una línea vertical en el 100% (la meta), de modo que se ve de un vistazo
+// si vamos por debajo o por encima. Umbrales suaves (un 84% ya no es "rojo").
+const PACE_SCALE = 1.25;
+function PaceRow({
+  label,
+  actual,
+  target,
+  mode,
+}: {
+  label: string;
+  actual: number;
+  target: number;
+  mode: "pipeline" | "spend";
+}) {
+  const pct = target > 0 ? actual / target : null;
+  const width = pct === null ? 0 : (Math.min(pct, PACE_SCALE) / PACE_SCALE) * 100;
+  const tone =
     pct === null
-      ? "bg-[var(--border)]"
-      : good
-        ? pct >= 1
-          ? "bg-[var(--good-solid)]"
-          : pct >= 0.85
-            ? "bg-[var(--warn-solid)]"
-            : "bg-[var(--error-solid)]"
-        : pct > 1
-          ? "bg-[var(--error-solid)]"
-          : "bg-[var(--good-solid)]";
+      ? "border"
+      : mode === "spend"
+        ? pct > 1.1
+          ? "error"
+          : pct > 1
+            ? "warn"
+            : "good"
+        : pct >= 0.95
+          ? "good"
+          : pct >= 0.7
+            ? "warn"
+            : "error";
+  const barCls = {
+    good: "bg-[var(--good-solid)]",
+    warn: "bg-[var(--warn-solid)]",
+    error: "bg-[var(--error-solid)]",
+    border: "bg-[var(--border)]",
+  }[tone];
+  const chipCls = {
+    good: "bg-[var(--good-bg)] text-[var(--good-text)]",
+    warn: "bg-[var(--warn-bg)] text-[var(--warn-text)]",
+    error: "bg-[var(--error-bg)] text-[var(--error-text)]",
+    border: "text-[var(--muted)]",
+  }[tone];
+
   return (
-    <div className="mb-3">
-      <div className="mb-1 flex items-center justify-between text-sm">
+    <div className="mb-4">
+      <div className="mb-1.5 flex items-center justify-between text-sm">
         <span className="text-[var(--muted)]">{label}</span>
-        <span className="tabular-nums">{pct === null ? "—" : fmtPct(pct)}</span>
+        <span className="flex items-center gap-2">
+          <span className="text-xs tabular-nums text-[var(--faint)]">
+            {fmtEur(actual)} / {fmtEur(target)}
+          </span>
+          <span className={`rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${chipCls}`}>
+            {pct === null ? "—" : fmtPct(pct)}
+          </span>
+        </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-[var(--subtle)]">
-        <div className={`h-full rounded-full ${cls}`} style={{ width: `${width}%` }} />
+      <div className="relative h-2.5 overflow-hidden rounded-full bg-[var(--subtle)]">
+        <div className={`h-full rounded-full ${barCls}`} style={{ width: `${width}%` }} />
+        {/* marca del objetivo (100%) */}
+        <div
+          className="absolute top-0 h-full w-px bg-[var(--text-secondary)]"
+          style={{ left: `${(1 / PACE_SCALE) * 100}%` }}
+        />
       </div>
     </div>
   );

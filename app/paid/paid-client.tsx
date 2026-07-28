@@ -32,21 +32,22 @@ function aggregateByCampaign(rows: CampaignRow[]): AggRow[] {
   return [...map.values()].sort((a, b) => b.spend - a.spend);
 }
 
-const cols: { label: string; help: string; fn: (r: ChannelMetrics) => string }[] = [
+// help solo en columnas cuyo origen no es obvio; el resto sin ⓘ para no saturar.
+const cols: { label: string; help?: string; fn: (r: ChannelMetrics) => string }[] = [
   { label: "Spend", help: PAID, fn: (r) => fmtEur(r.spend) },
-  { label: "Impr.", help: PAID, fn: (r) => fmtNum(r.impressions) },
-  { label: "Clics", help: PAID, fn: (r) => fmtNum(r.clicks) },
-  { label: "CTR", help: `Clics / Impresiones. ${PAID}`, fn: (r) => fmtPct(ctr(r)) },
-  { label: "CPC", help: `Spend / Clics. ${PAID}`, fn: (r) => fmtEur(cpc(r)) },
-  { label: "CPM", help: `Spend / Impresiones × 1000. ${PAID}`, fn: (r) => fmtEur(cpm(r)) },
+  { label: "Impr.", fn: (r) => fmtNum(r.impressions) },
+  { label: "Clics", fn: (r) => fmtNum(r.clicks) },
+  { label: "CTR", fn: (r) => fmtPct(ctr(r)) },
+  { label: "CPC", fn: (r) => fmtEur(cpc(r)) },
+  { label: "CPM", fn: (r) => fmtEur(cpm(r)) },
   { label: "Leads", help: CRM, fn: (r) => fmtNum(r.leads) },
-  { label: "MQL", help: CRM, fn: (r) => fmtNum(r.mql) },
-  { label: "SQL", help: CRM, fn: (r) => fmtNum(r.sql) },
+  { label: "MQL", fn: (r) => fmtNum(r.mql) },
+  { label: "SQL", fn: (r) => fmtNum(r.sql) },
   { label: "CPL", help: `Spend / Leads. ${MIX}`, fn: (r) => fmtEur(cpl(r)) },
-  { label: "CPMQL", help: `Spend / MQL. ${MIX}`, fn: (r) => fmtEur(cpmql(r)) },
-  { label: "CPSQL", help: `Spend / SQL. ${MIX}`, fn: (r) => fmtEur(cpsql(r)) },
+  { label: "CPMQL", fn: (r) => fmtEur(cpmql(r)) },
+  { label: "CPSQL", fn: (r) => fmtEur(cpsql(r)) },
   { label: "Pipeline €", help: `Importe de deals atribuidos. ${CRM}`, fn: (r) => fmtEur(r.pipeline) },
-  { label: "Closed Won", help: `Deals ganados. ${CRM}`, fn: (r) => fmtEur(r.closedWon) },
+  { label: "Closed Won", fn: (r) => fmtEur(r.closedWon) },
   { label: "ROI", help: "(Pipeline € − Spend) / Spend.", fn: (r) => fmtPct(roi(r)) },
 ];
 
@@ -110,10 +111,14 @@ export function PaidClient({
               <th className="px-3 py-3">País</th>
               {cols.map((c) => (
                 <th key={c.label} className="px-3 py-3 text-right">
-                  <span className="inline-flex flex-row-reverse items-center gap-1">
-                    {c.label}
-                    <Tooltip content={c.help} />
-                  </span>
+                  {c.help ? (
+                    <span className="inline-flex flex-row-reverse items-center gap-1">
+                      {c.label}
+                      <Tooltip content={c.help} />
+                    </span>
+                  ) : (
+                    c.label
+                  )}
                 </th>
               ))}
               <th className="px-3 py-3">Etiquetas</th>

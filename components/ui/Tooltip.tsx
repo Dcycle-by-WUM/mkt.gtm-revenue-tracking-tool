@@ -1,33 +1,34 @@
 "use client";
 
-import { useId, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 
-// Tooltip accesible (hover + foco por teclado). Pensado para explicar el origen
-// del dato en cabeceras de tabla y labels de KPI. Sin dependencias: burbuja
-// posicionada con CSS. `label` es el disparador (por defecto un icono ⓘ).
-export function Tooltip({
-  content,
-  children,
-  side = "top",
-}: {
-  content: ReactNode;
-  children?: ReactNode;
-  side?: "top" | "bottom";
-}) {
+// Tooltip accesible (hover + foco). La burbuja se renderiza en un PORTAL a
+// document.body con posición fija, para que NO la recorten los contenedores con
+// overflow (tablas con scroll horizontal) — antes se veían "por debajo".
+export function Tooltip({ content, children }: { content: ReactNode; children?: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const id = useId();
+  const [coords, setCoords] = useState<{ top: number; left: number; below: boolean } | null>(null);
+  const ref = useRef<HTMLButtonElement>(null);
 
-  const pos =
-    side === "top"
-      ? "bottom-full left-1/2 mb-2 -translate-x-1/2"
-      : "top-full left-1/2 mt-2 -translate-x-1/2";
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    const below = r.top < 120; // si no cabe arriba, colócalo debajo
+    setCoords({
+      top: below ? r.bottom + 8 : r.top - 8,
+      left: r.left + r.width / 2,
+      below,
+    });
+  }, [open]);
 
   return (
     <span className="relative inline-flex items-center">
       <button
+        ref={ref}
         type="button"
-        aria-describedby={open ? id : undefined}
+        aria-label="Más información"
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)}
@@ -40,38 +41,22 @@ export function Tooltip({
       >
         {children ?? <Info className="h-3.5 w-3.5" strokeWidth={2} />}
       </button>
-      {open && (
-        <span
-          id={id}
-          role="tooltip"
-          className={`pointer-events-none absolute z-50 ${pos} w-56 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-[var(--text-secondary)] shadow-[var(--shadow-lg)]`}
-        >
-          {content}
-        </span>
-      )}
+      {open && coords && typeof document !== "undefined" &&
+        createPortal(
+          <span
+            role="tooltip"
+            style={{
+              position: "fixed",
+              top: coords.top,
+              left: coords.left,
+              transform: `translate(-50%, ${coords.below ? "0" : "-100%"})`,
+            }}
+            className="pointer-events-none z-[100] w-56 rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-[var(--text-secondary)] shadow-[var(--shadow-lg)]"
+          >
+            {content}
+          </span>,
+          document.body,
+        )}
     </span>
-  );
-}
-
-// Cabecera de tabla con ⓘ que explica el origen del dato. Uso:
-//   <ThInfo help="Spend de Supermetrics (LinkedIn+Google)">Spend</ThInfo>
-export function ThInfo({
-  children,
-  help,
-  align = "left",
-  className = "",
-}: {
-  children: ReactNode;
-  help: ReactNode;
-  align?: "left" | "right";
-  className?: string;
-}) {
-  return (
-    <th className={`px-3 py-2 ${align === "right" ? "text-right" : "text-left"} ${className}`}>
-      <span className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
-        {children}
-        <Tooltip content={help} />
-      </span>
-    </th>
   );
 }
