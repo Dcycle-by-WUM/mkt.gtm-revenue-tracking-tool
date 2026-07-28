@@ -2,18 +2,15 @@ import { PageHeader } from "@/components/Page";
 import { listCampaigns } from "@/lib/data/campaigns";
 import { listCountryGroups } from "@/lib/data/regions";
 import { listTargets } from "@/lib/data/targets";
-import { OverviewClient } from "./overview-client";
+import { DashboardClient } from "./dashboard-client";
 
-// Renderizar en runtime: si fuera estático, los flags de `integrations` se
-// hornean al build y un cambio de env vars no se refleja hasta el siguiente
-// build. Con datos en Supabase queremos que los KPIs sean siempre frescos.
 export const dynamic = "force-dynamic";
 
-// Overview "Cómo vamos vs Target" — PRD §9 (2). Server Component que delega
-// los datos (Supabase si vivo, mock si no) y los pasa al Client interactivo.
-// El funnel completo por canal/país se movió a /metrics.
-export default async function OverviewPage() {
-  const [campaigns, groups, targets] = await Promise.all([
+// Dashboard inicial — vista de un vistazo (rediseño jul-2026). Resume inversión,
+// pipeline, ROI y embudo del mes/YTD y enlaza al detalle. Los datos vienen de la
+// capa `lib/data/*` (Supabase si vivo, mock si no).
+export default async function DashboardPage() {
+  const [campaigns, , targets] = await Promise.all([
     listCampaigns(),
     listCountryGroups(),
     listTargets(),
@@ -21,10 +18,10 @@ export default async function OverviewPage() {
   return (
     <div>
       <PageHeader
-        title="Overview — Cómo vamos vs Target"
-        subtitle="Objetivo vs resultado por mes: Spain, Rest of Intl + DACH y Total. El mes en curso se proyecta a fin de mes; los cerrados muestran el real consolidado."
+        title="Dashboard"
+        subtitle="Cómo va el motor GTM de un vistazo: inversión paid, pipeline generado, ROI y embudo — con el detalle a un clic."
       />
-      <OverviewClient campaigns={campaigns} targets={targets} groups={groups} />
+      <DashboardClient campaigns={campaigns} targets={targets} />
     </div>
   );
 }
