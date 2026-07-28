@@ -49,12 +49,13 @@ export function Sidebar() {
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--panel)]">
       <div className="px-5 pb-4 pt-6">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--accent)] text-xs font-bold text-white">
+        <div className="flex items-center gap-2.5">
+          {/* Marca provisional (navy + lima) hasta integrar el logo definitivo. */}
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-sm font-bold text-[var(--lime)]">
             D
           </span>
           <div>
-            <div className="text-sm font-semibold leading-tight">Dcycle GTM</div>
+            <div className="text-sm font-semibold leading-tight tracking-tight">Dcycle GTM</div>
             <div className="text-[11px] text-[var(--muted)]">Revenue Tracking</div>
           </div>
         </div>
