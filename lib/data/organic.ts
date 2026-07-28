@@ -1,137 +1,105 @@
 // SEO + AEO — PRD §11. Las herramientas concretas (Moz/Ahrefs/Semrush para DA,
-// Profound/Peec/Otterly/Semrush AI para AEO) están "on hold" en DECISIONES.md,
-// pero el modelo de datos ya está en su sitio para enchufarlas.
+// Profound/Peec/Otterly/Semrush AI para AEO) siguen "on hold" en
+// DECISIONES.md #6/#7, pero el modelo ya soporta desglose por motor
+// (`ai_visibility.platform`) y qué URL citó cada uno (`cited_url`, migración
+// 0025). Motor prioritario: Microsoft Copilot — la mayoría de clientes
+// Dcycle lo usan, y Copilot se nutre del índice de Bing (de ahí que
+// `organic_traffic` con `source = 'Bing'` sea relevante como salud técnica
+// de indexación).
+//
+// Sigue el mismo patrón que lib/data/campaigns.ts: fetch de TODAS las filas
+// (fallback a mock si Supabase no tiene nada), filtrado/agregación en el
+// cliente vía FilterBar (país + rango de fechas monthFrom/monthTo).
 
 import { getSupabase } from "@/lib/supabase/client";
-import { mockSeoKpis, mockAeoKpis } from "@/lib/mock-data";
-import { fmtEur, fmtNum } from "@/lib/kpis";
+import {
+  mockOrganicTraffic, mockBingTraffic, mockAiVisibility, mockDomainAuthority,
+  mockKeywordRankings, mockOrganicLeads,
+} from "@/lib/mock-data";
 import type { DbOrganicTraffic, DbAiVisibility } from "@/lib/supabase/types";
 
-export type OrganicKpi = { kpi: string; value: string; source: string };
+// Copilot primero: motor prioritario para Dcycle en la UI y en share of voice.
+export const AI_ENGINES = ["Copilot", "ChatGPT", "Perplexity", "Gemini"] as const;
 
-function pct(n: number, total: number): string {
-  if (total === 0) return "—";
-  return `${Math.round((n / total) * 100)} %`;
+export type DomainAuthoritySnapshot = { da: number; provider: string };
+
+export type KeywordRanking = { keyword: string; position: number; date: string };
+
+export type OrganicLeadRow = {
+  contactId: string;
+  source: "ORGANIC_SEARCH" | "AI_REFERRALS";
+  month: string; // YYYY-MM, derivado de created_at_hs
+  isMql: boolean;
+  dealAmount: number; // suma de deals asociados (amount_in_home_currency, fallback amount)
+};
+
+export async function listOrganicTraffic(): Promise<DbOrganicTraffic[]> {
+  const sb = getSupabase();
+  if (!sb) return [...mockOrganicTraffic, ...mockBingTraffic];
+  const { data } = await sb.from("organic_traffic").select("*").order("date", { ascending: true });
+  return data && data.length > 0 ? (data as DbOrganicTraffic[]) : [...mockOrganicTraffic, ...mockBingTraffic];
 }
 
-export async function getSeoKpis(month: string): Promise<OrganicKpi[]> {
+export async function listAiVisibility(): Promise<DbAiVisibility[]> {
   const sb = getSupabase();
-  if (!sb) return mockSeoKpis;
+  if (!sb) return mockAiVisibility;
+  const { data } = await sb.from("ai_visibility").select("*").order("date", { ascending: true });
+  return data && data.length > 0 ? (data as DbAiVisibility[]) : mockAiVisibility;
+}
 
-  const { data: traffic } = await sb
-    .from("organic_traffic")
-    .select("source, clicks, impressions, is_branded")
-    .gte("date", `${month}-01`)
-    .lte("date", `${month}-31`);
-
-  const t = (traffic ?? []) as Pick<DbOrganicTraffic, "source" | "clicks" | "impressions" | "is_branded">[];
-  if (t.length === 0) return mockSeoKpis;
-
-  const sessions = t.filter((r) => !r.is_branded).reduce((s, r) => s + (r.clicks ?? 0), 0);
-
-  // Domain Authority — última snapshot.
-  const { data: da } = await sb
+export async function getDomainAuthority(): Promise<DomainAuthoritySnapshot> {
+  const sb = getSupabase();
+  if (!sb) return mockDomainAuthority;
+  const { data } = await sb
     .from("domain_authority")
     .select("da, provider, date")
     .order("date", { ascending: false })
     .limit(1)
     .maybeSingle();
-
-  // Keywords en top 3 — último día con datos.
-  const { data: kw } = await sb
-    .from("keyword_rankings")
-    .select("keyword, position, date")
-    .lte("position", 3)
-    .gte("date", `${month}-01`)
-    .lte("date", `${month}-31`);
-  const top3 = new Set((kw ?? []).map((k: { keyword: string }) => k.keyword)).size;
-
-  // Leads + pipeline orgánicos (vienen de contacts con analytics_source).
-  const { data: leadsOrg } = await sb
-    .from("contacts")
-    .select("id, is_mql")
-    .eq("analytics_source", "ORGANIC_SEARCH")
-    .gte("created_at_hs", `${month}-01`)
-    .lte("created_at_hs", `${month}-31`);
-  const leads = leadsOrg?.length ?? 0;
-  const mql = leadsOrg?.filter((c: { is_mql: boolean | null }) => c.is_mql).length ?? 0;
-
-  const { data: pipelineRows } = await sb
-    .from("deals")
-    .select("amount, hubspot_contact_id, contacts!inner(analytics_source)")
-    .eq("contacts.analytics_source", "ORGANIC_SEARCH");
-  const pipelineEur = (pipelineRows ?? []).reduce(
-    (s: number, d: { amount: number }) => s + Number(d.amount ?? 0),
-    0,
-  );
-
-  return [
-    { kpi: "Tráfico orgánico non-branded", value: `${fmtNum(sessions)} sesiones`, source: "GSC + GA4" },
-    {
-      kpi: "Domain Authority (DA)",
-      value: da ? `${da.da} (${da.provider})` : "—",
-      source: "Moz/Ahrefs/Semrush",
-    },
-    { kpi: "Keywords estratégicas en Top 3", value: fmtNum(top3), source: "GSC / rank tracker" },
-    { kpi: "Leads orgánicos", value: fmtNum(leads), source: "HubSpot" },
-    { kpi: "MQL orgánicos", value: fmtNum(mql), source: "HubSpot" },
-    { kpi: "Pipeline SEO €", value: fmtEur(pipelineEur), source: "HubSpot" },
-  ];
+  return data ? { da: data.da, provider: data.provider } : mockDomainAuthority;
 }
 
-export async function getAeoKpis(month: string): Promise<OrganicKpi[]> {
+export async function listKeywordRankings(): Promise<KeywordRanking[]> {
   const sb = getSupabase();
-  if (!sb) return mockAeoKpis;
+  if (!sb) return mockKeywordRankings;
+  const { data } = await sb
+    .from("keyword_rankings")
+    .select("keyword, position, date")
+    .order("date", { ascending: true });
+  return data && data.length > 0 ? (data as KeywordRanking[]) : mockKeywordRankings;
+}
 
-  const { data: ai } = await sb
-    .from("ai_visibility")
-    .select("appeared, competitors")
-    .gte("date", `${month}-01`)
-    .lte("date", `${month}-31`);
+export async function listOrganicLeads(): Promise<OrganicLeadRow[]> {
+  const sb = getSupabase();
+  if (!sb) return mockOrganicLeads;
 
-  const rows = (ai ?? []) as unknown as DbAiVisibility[];
-  const total = rows.length;
-  if (total === 0) return mockAeoKpis;
-  const appeared = rows.filter((r) => r.appeared).length;
-  const ourSov = appeared;
-  const competitorsAppeared = rows.reduce(
-    (s, r) => s + r.competitors.filter((c) => c.appeared).length,
-    0,
-  );
-  const sov = pct(ourSov, ourSov + competitorsAppeared);
-
-  // Leads/pipeline desde IA (analytics_source = AI_REFERRALS) + Bing.
-  const { data: aiLeads } = await sb
+  const { data: contacts } = await sb
     .from("contacts")
-    .select("id")
-    .eq("analytics_source", "AI_REFERRALS")
-    .gte("created_at_hs", `${month}-01`)
-    .lte("created_at_hs", `${month}-31`);
-  const { data: aiPipelineRows } = await sb
+    .select("id, hubspot_contact_id, is_mql, created_at_hs, analytics_source")
+    .in("analytics_source", ["ORGANIC_SEARCH", "AI_REFERRALS"])
+    .not("created_at_hs", "is", null);
+  const rows = (contacts ?? []) as {
+    id: string; hubspot_contact_id: string; is_mql: boolean | null;
+    created_at_hs: string; analytics_source: string;
+  }[];
+  if (rows.length === 0) return mockOrganicLeads;
+
+  const { data: deals } = await sb
     .from("deals")
-    .select("amount, contacts!inner(analytics_source)")
-    .eq("contacts.analytics_source", "AI_REFERRALS");
-  const aiPipeline = (aiPipelineRows ?? []).reduce(
-    (s: number, d: { amount: number }) => s + Number(d.amount ?? 0),
-    0,
-  );
+    .select("hubspot_contact_id, amount, amount_in_home_currency")
+    .in("hubspot_contact_id", rows.map((r) => r.hubspot_contact_id));
+  const dealsByContact = new Map<string, number>();
+  for (const d of (deals ?? []) as { hubspot_contact_id: string | null; amount: number; amount_in_home_currency: number | null }[]) {
+    if (!d.hubspot_contact_id) continue;
+    const amount = Number(d.amount_in_home_currency ?? d.amount ?? 0);
+    dealsByContact.set(d.hubspot_contact_id, (dealsByContact.get(d.hubspot_contact_id) ?? 0) + amount);
+  }
 
-  const { data: bing } = await sb
-    .from("organic_traffic")
-    .select("impressions")
-    .eq("source", "Bing")
-    .gte("date", `${month}-01`)
-    .lte("date", `${month}-31`);
-  const bingImpressions = (bing ?? []).reduce(
-    (s: number, r: { impressions: number }) => s + (r.impressions ?? 0),
-    0,
-  );
-
-  return [
-    { kpi: "AI Visibility", value: pct(appeared, total), source: "Plataforma AI-visibility" },
-    { kpi: "AI Share of Voice", value: sov, source: "Plataforma AI-visibility" },
-    { kpi: "Leads desde IA (AI_REFERRALS)", value: fmtNum(aiLeads?.length ?? 0), source: "HubSpot" },
-    { kpi: "Pipeline desde IA €", value: fmtEur(aiPipeline), source: "HubSpot" },
-    { kpi: "Bing — impresiones", value: fmtNum(bingImpressions), source: "Bing WMT" },
-  ];
+  return rows.map((r) => ({
+    contactId: r.id,
+    source: r.analytics_source as "ORGANIC_SEARCH" | "AI_REFERRALS",
+    month: r.created_at_hs.slice(0, 7),
+    isMql: Boolean(r.is_mql),
+    dealAmount: dealsByContact.get(r.hubspot_contact_id) ?? 0,
+  }));
 }

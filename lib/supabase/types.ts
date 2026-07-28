@@ -307,6 +307,7 @@ export type DbAiVisibility = {
   appeared: boolean;
   rank_in_answer: number | null;
   competitors: { name: string; appeared: boolean; rank: number | null }[];
+  cited_url: string | null; // URL que citó el motor en su respuesta (migración 0025)
   platform: string;
   synced_at: string;
 };
