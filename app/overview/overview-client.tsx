@@ -12,6 +12,7 @@ import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtPct } from "@/lib/kpis";
 import { monthStatus, daysElapsedAndTotal, projectFullMonth, type MonthStatus } from "@/lib/pacing";
 import { actionUpsertTarget } from "@/app/actions";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 // Overview "Cómo vamos vs Target" — PRD §9 (2), rediseño jul-2026. Antes esta
 // pantalla mostraba el funnel completo (ahora en /metrics); esta versión se
@@ -91,6 +92,18 @@ function projected(value: number, month: string, status: MonthStatus): number | 
   if (status === "future") return null;
   if (status === "past") return value;
   return projectFullMonth(value, month);
+}
+
+// Cabecera alineada a la derecha con tooltip de origen del dato.
+function ThRight({ label, help }: { label: string; help: string }) {
+  return (
+    <th className="px-3 py-2 text-right">
+      <span className="inline-flex flex-row-reverse items-center gap-1">
+        {label}
+        <Tooltip content={help} />
+      </span>
+    </th>
+  );
 }
 
 function DeltaBadge({ pct }: { pct: number | null }) {
@@ -180,11 +193,11 @@ function ScopeTable({
           <thead className="bg-[var(--subtle)] text-left text-[11px] uppercase text-[var(--muted)]">
             <tr>
               <th className="px-3 py-2">Canal</th>
-              <th className="px-3 py-2 text-right">Spend Obj</th>
-              <th className="px-3 py-2 text-right">Spend Actual</th>
+              <ThRight label="Spend Obj" help="Objetivo de inversión, editable aquí. Se guarda en Supabase." />
+              <ThRight label="Spend Actual" help="Inversión real de paid media (LinkedIn+Google) vía Supermetrics. En el mes en curso, proyectada a fin de mes." />
               <th className="px-3 py-2 text-right">Δ</th>
-              <th className="px-3 py-2 text-right">Pipeline Obj</th>
-              <th className="px-3 py-2 text-right">Pipeline Actual</th>
+              <ThRight label="Pipeline Obj" help="Objetivo de pipeline €, editable aquí. Se guarda en Supabase." />
+              <ThRight label="Pipeline Actual" help="Pipeline € real de deals atribuidos (HubSpot), por utm_campaign. En el mes en curso, proyectado a fin de mes." />
               <th className="px-3 py-2 text-right">Δ</th>
             </tr>
           </thead>
