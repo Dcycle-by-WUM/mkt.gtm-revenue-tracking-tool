@@ -47,11 +47,11 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--panel)]">
+    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface-sidebar)]">
       <div className="px-5 pb-4 pt-6">
         <div className="flex items-center gap-2.5">
-          {/* Marca provisional (navy + lima) hasta integrar el logo definitivo. */}
-          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-sm font-bold text-[var(--lime)]">
+          {/* Marca provisional (azul dcycle) hasta integrar el logo definitivo. */}
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--brand)] text-sm font-bold text-[var(--brand-contrast)]">
             D
           </span>
           <div>

@@ -100,7 +100,7 @@ function DeltaBadge({ pct }: { pct: number | null }) {
       ? "bg-[var(--good-bg)] text-[var(--good-text)]"
       : pct >= 0.85
         ? "bg-[var(--warn-bg)] text-[var(--warn-text)]"
-        : "bg-red-50 text-red-700";
+        : "bg-[var(--error-bg)] text-[var(--error-text)]";
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{fmtPct(pct)}</span>;
 }
 
@@ -126,13 +126,13 @@ function PacingBar({
       ? "bg-[var(--border)]"
       : mode === "spend"
         ? pct > 1
-          ? "bg-red-600"
-          : "bg-emerald-600"
+          ? "bg-[var(--error-solid)]"
+          : "bg-[var(--good-solid)]"
         : pct >= 1
-          ? "bg-emerald-600"
+          ? "bg-[var(--good-solid)]"
           : pct >= 0.85
-            ? "bg-amber-500"
-            : "bg-red-600";
+            ? "bg-[var(--warn-solid)]"
+            : "bg-[var(--error-solid)]";
   return (
     <div className="flex items-center gap-2 px-4 py-2.5">
       <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</span>
@@ -209,7 +209,7 @@ function ScopeTable({
                   </td>
                   <td
                     className={`px-3 py-2 text-right tabular-nums ${
-                      spendActual !== null && spendActual > r.targetSpend ? "text-red-700" : ""
+                      spendActual !== null && spendActual > r.targetSpend ? "text-[var(--error-text)]" : ""
                     }`}
                   >
                     {spendActual === null ? "—" : fmtEur(spendActual)}
@@ -245,7 +245,7 @@ function ScopeTable({
               <td className="px-3 py-2 text-right tabular-nums">{fmtEur(total.targetSpend)}</td>
               <td
                 className={`px-3 py-2 text-right tabular-nums ${
-                  projTargetSpend !== null && projTargetSpend > total.targetSpend ? "text-red-700" : ""
+                  projTargetSpend !== null && projTargetSpend > total.targetSpend ? "text-[var(--error-text)]" : ""
                 }`}
               >
                 {projTargetSpend === null ? "—" : fmtEur(projTargetSpend)}
