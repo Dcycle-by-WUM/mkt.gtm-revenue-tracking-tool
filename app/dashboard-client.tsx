@@ -121,13 +121,15 @@ export function DashboardClient({
       title: "Indicadores",
       span: 3,
       node: (
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-          <KpiCell label="Inversión" value={fmtEur(t.spend)} help={SRC.spend} icon={<Wallet className="h-4 w-4" />}
-            hint={targetSpend > 0 ? `Obj ${fmtEur(targetSpend)} · ${fmtPct(spendPace)}` : undefined} />
-          <KpiCell label="Pipeline generado" value={fmtEur(t.pipeline)} help={SRC.pipeline} icon={<TrendingUp className="h-4 w-4" />}
-            hint={targetPipeline > 0 ? `Obj ${fmtEur(targetPipeline)} · ${fmtPct(pipelinePace)}` : undefined} />
-          <KpiCell label="ROI" value={fmtPct(roi(t))} icon={<Target className="h-4 w-4" />} hint="Pipeline € por € invertido" />
-          <KpiCell label="Closed Won" value={fmtEur(t.closedWon)} icon={<Trophy className="h-4 w-4" />} />
+        <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
+          <KpiCell label="Inversión" value={fmtEur(t.spend)} help={SRC.spend} icon={<Wallet className="h-5 w-5" />}
+            sub={targetSpend > 0 ? `Objetivo ${fmtEur(targetSpend)}` : undefined}
+            delta={targetSpend > 0 ? { pace: spendPace!, positiveIsGood: false } : undefined} />
+          <KpiCell label="Pipeline generado" value={fmtEur(t.pipeline)} help={SRC.pipeline} icon={<TrendingUp className="h-5 w-5" />}
+            sub={targetPipeline > 0 ? `Objetivo ${fmtEur(targetPipeline)}` : undefined}
+            delta={targetPipeline > 0 ? { pace: pipelinePace!, positiveIsGood: true } : undefined} />
+          <KpiCell label="ROI" value={fmtPct(roi(t))} icon={<Target className="h-5 w-5" />} sub="Pipeline € por € invertido" />
+          <KpiCell label="Closed Won" value={fmtEur(t.closedWon)} icon={<Trophy className="h-5 w-5" />} sub="Deals ganados" />
         </div>
       ),
     },
@@ -402,25 +404,57 @@ function KpiCell({
   label,
   value,
   help,
-  hint,
+  sub,
   icon,
+  delta,
 }: {
   label: string;
   value: React.ReactNode;
   help?: React.ReactNode;
-  hint?: React.ReactNode;
+  sub?: React.ReactNode;
   icon?: React.ReactNode;
+  delta?: { pace: number; positiveIsGood: boolean };
 }) {
   return (
     <div>
-      <div className="mb-1.5 flex items-center gap-1.5">
-        {icon && <span className="text-[var(--faint)]">{icon}</span>}
+      <div className="mb-2 flex items-center gap-2">
+        {icon && (
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
+            {icon}
+          </span>
+        )}
         <span className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">{label}</span>
         {help && <Tooltip content={help} />}
       </div>
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      {hint && <div className="mt-1 text-xs text-[var(--muted)]">{hint}</div>}
+      <div className="flex items-end gap-2">
+        <span className="text-3xl font-semibold leading-none tabular-nums">{value}</span>
+        {delta && <DeltaChip pace={delta.pace} positiveIsGood={delta.positiveIsGood} />}
+      </div>
+      {sub && <div className="mt-1.5 text-xs text-[var(--muted)]">{sub}</div>}
     </div>
+  );
+}
+
+// Chip de tendencia vs objetivo: ▲/▼ + desvío (p. ej. +6,6% / −1,9%), en verde
+// si el ritmo es bueno, ámbar si roza, rojo si se desvía mucho. `positiveIsGood`
+// distingue pipeline (más = mejor) de inversión (pasarse = malo).
+function DeltaChip({ pace, positiveIsGood }: { pace: number; positiveIsGood: boolean }) {
+  const diff = pace - 1;
+  const above = pace >= 1;
+  const tone = positiveIsGood
+    ? pace >= 0.95 ? "good" : pace >= 0.7 ? "warn" : "error"
+    : pace <= 1 ? "good" : pace <= 1.1 ? "warn" : "error";
+  const cls = {
+    good: "bg-[var(--good-bg)] text-[var(--good-text)]",
+    warn: "bg-[var(--warn-bg)] text-[var(--warn-text)]",
+    error: "bg-[var(--error-bg)] text-[var(--error-text)]",
+  }[tone];
+  const sign = diff >= 0 ? "+" : "−";
+  return (
+    <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums ${cls}`}>
+      {above ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+      {sign}{fmtPct(Math.abs(diff))}
+    </span>
   );
 }
 
