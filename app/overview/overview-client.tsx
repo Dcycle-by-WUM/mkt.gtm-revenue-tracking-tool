@@ -492,11 +492,11 @@ export function OverviewClient({
         <StatusBadge month={month} status={status} />
       </div>
 
-      {/* Resumen al principio: totales del mes + tendencia + reparto por región. */}
-      <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        <div className="card p-5">
+      {/* Resumen al principio: totales del mes + reparto (izq) y tendencia (der). */}
+      <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-3">
+        <div className="card flex flex-col p-5">
           <h3 className="mb-3 text-sm font-semibold">Resumen · {month}</h3>
-          <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <SummaryStat
               label="Pipeline"
               actual={projected(totalSel.actualPipeline, month, status)}
@@ -510,26 +510,28 @@ export function OverviewClient({
               mode="spend"
             />
           </div>
+          {regionSplit.length > 0 && (
+            <div className="mt-5 flex-1 border-t border-[var(--border)] pt-4">
+              <div className="mb-3 text-xs uppercase tracking-wide text-[var(--muted)]">Reparto por región</div>
+              <Donut data={regionSplit} size={132} formatValue={(v) => fmtEur(v)} />
+            </div>
+          )}
         </div>
 
-        <div className="card p-5 lg:col-span-2">
+        <div className="card flex flex-col p-5 lg:col-span-2">
           <h3 className="mb-3 text-sm font-semibold">Pipeline por mes · Objetivo vs Real</h3>
-          <GroupedBars
-            categories={monthlyPipeline.map((m) => m.month)}
-            series={[
-              { label: "Objetivo", color: "var(--chart-3)", values: monthlyPipeline.map((m) => m.target) },
-              { label: "Real", color: "var(--chart-1)", values: monthlyPipeline.map((m) => m.actual) },
-            ]}
-            formatValue={(v) => fmtEur(v)}
-          />
-        </div>
-
-        {regionSplit.length > 0 && (
-          <div className="card p-5 lg:col-span-3">
-            <h3 className="mb-4 text-sm font-semibold">Reparto de pipeline por región · {month}</h3>
-            <Donut data={regionSplit} formatValue={(v) => fmtEur(v)} />
+          <div className="flex flex-1 items-center">
+            <GroupedBars
+              categories={monthlyPipeline.map((m) => m.month)}
+              series={[
+                { label: "Objetivo", color: "var(--chart-3)", values: monthlyPipeline.map((m) => m.target) },
+                { label: "Real", color: "var(--chart-1)", values: monthlyPipeline.map((m) => m.actual) },
+              ]}
+              formatValue={(v) => fmtEur(v)}
+              height={260}
+            />
           </div>
-        )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">
