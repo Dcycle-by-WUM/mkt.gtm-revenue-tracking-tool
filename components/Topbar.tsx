@@ -23,8 +23,11 @@ export function Topbar() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/dcycle-logo.svg" alt="dcycle" className="h-[22px] w-auto lg:hidden" />
+          <Link href="/" className="flex items-center gap-2 lg:hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/atri-icon.svg" alt="atri" className="h-7 w-7 rounded-lg" />
+            <span className="text-base font-bold tracking-[-0.04em] text-[var(--brand)]">atri</span>
+          </Link>
         </div>
 
         <div className="flex items-center gap-3">
@@ -38,12 +41,15 @@ export function Topbar() {
           <div className="absolute inset-0 bg-[var(--color-gray-900)]/40" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-0 flex h-full w-64 flex-col bg-[var(--surface-sidebar)] shadow-lg">
             <div className="flex items-center justify-between px-5 pb-4 pt-6">
-              <Link href="/" onClick={() => setOpen(false)} className="flex flex-col gap-1.5">
+              <Link href="/" onClick={() => setOpen(false)} className="flex items-center gap-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/brand/dcycle-logo.svg" alt="dcycle" className="h-[26px] w-auto" />
-                <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--faint)]">
-                  GTM · Revenue Tracking
-                </span>
+                <img src="/brand/atri-icon.svg" alt="atri" className="h-9 w-9 rounded-xl" />
+                <div>
+                  <div className="text-lg font-bold leading-none tracking-[-0.04em] text-[var(--brand)]">atri</div>
+                  <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-[var(--faint)]">
+                    GTM · Revenue
+                  </div>
+                </div>
               </Link>
               <button
                 onClick={() => setOpen(false)}

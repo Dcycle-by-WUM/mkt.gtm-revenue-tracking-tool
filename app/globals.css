@@ -128,6 +128,17 @@ h1, h2, h3 {
   line-height: 1.15;
 }
 
+/* Los controles de formulario NO heredan la fuente por defecto (salían en la
+   fuente del sistema, no Inter). Forzamos herencia para que toda cifra escrita
+   en inputs/selects use Inter con el mismo tracking. */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  letter-spacing: inherit;
+}
+
 ::selection {
   background: var(--brand);
   color: #ffffff;
