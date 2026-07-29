@@ -13,6 +13,7 @@ import { fmtEur, fmtPct } from "@/lib/kpis";
 import { monthStatus, daysElapsedAndTotal, projectFullMonth, type MonthStatus } from "@/lib/pacing";
 import { actionUpsertTarget } from "@/app/actions";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { GroupedBars, Donut } from "@/components/ui/charts";
 
 // Overview "Cómo vamos vs Target" — PRD §9 (2), rediseño jul-2026. Antes esta
 // pantalla mostraba el funnel completo (ahora en /metrics); esta versión se
@@ -115,6 +116,45 @@ function DeltaBadge({ pct }: { pct: number | null }) {
         ? "bg-[var(--warn-bg)] text-[var(--warn-text)]"
         : "bg-[var(--error-bg)] text-[var(--error-text)]";
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{fmtPct(pct)}</span>;
+}
+
+// Stat de resumen: valor grande (real/proyectado) + objetivo + chip de %.
+function SummaryStat({
+  label,
+  actual,
+  target,
+  mode,
+}: {
+  label: string;
+  actual: number | null;
+  target: number;
+  mode: "pipeline" | "spend";
+}) {
+  const pct = target > 0 && actual !== null ? actual / target : null;
+  const tone =
+    pct === null
+      ? "muted"
+      : mode === "spend"
+        ? pct > 1.1 ? "error" : pct > 1 ? "warn" : "good"
+        : pct >= 0.95 ? "good" : pct >= 0.7 ? "warn" : "error";
+  const chip = {
+    good: "bg-[var(--good-bg)] text-[var(--good-text)]",
+    warn: "bg-[var(--warn-bg)] text-[var(--warn-text)]",
+    error: "bg-[var(--error-bg)] text-[var(--error-text)]",
+    muted: "text-[var(--muted)]",
+  }[tone];
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wide text-[var(--muted)]">{label}</span>
+        <span className={`rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${chip}`}>
+          {pct === null ? "—" : fmtPct(pct)}
+        </span>
+      </div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums">{actual === null ? "—" : fmtEur(actual)}</div>
+      <div className="text-xs text-[var(--muted)]">Objetivo {fmtEur(target)}</div>
+    </div>
+  );
 }
 
 // Pipeline: más que el objetivo es bueno (verde a partir de 100%, ámbar
@@ -379,6 +419,28 @@ export function OverviewClient({
     });
   }, [campaigns, month, spainRows, restRows]);
 
+  // Serie mensual (todos los meses) para la gráfica de tendencia Objetivo vs Real.
+  const monthlyPipeline = useMemo(
+    () =>
+      allMonths.map((m) => ({
+        month: m,
+        actual: campaigns.filter((c) => c.month === m).reduce((s, c) => s + c.pipeline, 0),
+        target: targetsState.filter((r) => r.month === m).reduce((s, r) => s + r.targetPipeline, 0),
+      })),
+    [allMonths, campaigns, targetsState],
+  );
+
+  // Totales del mes seleccionado + reparto de pipeline por región (para la dona).
+  const totalSel = useMemo(() => sumScope(totalRows), [totalRows]);
+  const spainPipe = useMemo(() => spainRows.reduce((s, r) => s + r.actualPipeline, 0), [spainRows]);
+  const restPipe = useMemo(() => restRows.reduce((s, r) => s + r.actualPipeline, 0), [restRows]);
+  const otherPipe = Math.max(0, totalSel.actualPipeline - spainPipe - restPipe);
+  const regionSplit = [
+    { label: "Spain", value: spainPipe, color: "var(--chart-1)" },
+    { label: "Rest of Intl + DACH", value: restPipe, color: "var(--chart-2)" },
+    { label: "Sin país / Multi", value: otherPipe, color: "var(--chart-6)" },
+  ].filter((d) => d.value > 0);
+
   // El input muestra el total (targets legacy por país + top-up de este
   // bloque). Al editar, solo se recalcula y persiste el top-up — nunca
   // tocamos los targets legacy por país que ya existieran (p. ej. UK, DE).
@@ -428,6 +490,46 @@ export function OverviewClient({
           →
         </button>
         <StatusBadge month={month} status={status} />
+      </div>
+
+      {/* Resumen al principio: totales del mes + tendencia + reparto por región. */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-3">
+        <div className="card p-5">
+          <h3 className="mb-3 text-sm font-semibold">Resumen · {month}</h3>
+          <div className="space-y-4">
+            <SummaryStat
+              label="Pipeline"
+              actual={projected(totalSel.actualPipeline, month, status)}
+              target={totalSel.targetPipeline}
+              mode="pipeline"
+            />
+            <SummaryStat
+              label="Inversión"
+              actual={projected(totalSel.actualSpend, month, status)}
+              target={totalSel.targetSpend}
+              mode="spend"
+            />
+          </div>
+        </div>
+
+        <div className="card p-5 lg:col-span-2">
+          <h3 className="mb-3 text-sm font-semibold">Pipeline por mes · Objetivo vs Real</h3>
+          <GroupedBars
+            categories={monthlyPipeline.map((m) => m.month)}
+            series={[
+              { label: "Objetivo", color: "var(--chart-3)", values: monthlyPipeline.map((m) => m.target) },
+              { label: "Real", color: "var(--chart-1)", values: monthlyPipeline.map((m) => m.actual) },
+            ]}
+            formatValue={(v) => fmtEur(v)}
+          />
+        </div>
+
+        {regionSplit.length > 0 && (
+          <div className="card p-5 lg:col-span-3">
+            <h3 className="mb-4 text-sm font-semibold">Reparto de pipeline por región · {month}</h3>
+            <Donut data={regionSplit} formatValue={(v) => fmtEur(v)} />
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-4">
