@@ -1,9 +1,0 @@
-<svg width="1000" height="1000" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
-  <!-- Icono de producto atri (aprox.): cuadrado navy + monograma "a." azul claro.
-       Placeholder editable — sustituible por el SVG/PNG oficial en public/brand. -->
-  <rect width="1000" height="1000" rx="210" fill="#031E3B"/>
-  <text x="500" y="500" fill="#CDE3FF"
-        font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif"
-        font-size="620" font-weight="700" letter-spacing="-30"
-        text-anchor="middle" dominant-baseline="central">a.</text>
-</svg>

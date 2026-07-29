@@ -10,10 +10,11 @@ export function Sidebar() {
       <div className="px-5 pb-4 pt-6">
         <Link href="/" className="flex items-center gap-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/atri-icon.svg" alt="atri" className="h-9 w-9 rounded-xl" />
+          <img src="/brand/atri-app-icon.png" alt="atri" className="h-9 w-9 rounded-xl" />
           <div>
-            <div className="text-lg font-bold leading-none tracking-[-0.04em] text-[var(--brand)]">atri</div>
-            <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-[var(--faint)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/atri-wordmark.png" alt="atri" className="h-[15px] w-auto" />
+            <div className="mt-1.5 text-[10px] font-medium uppercase tracking-wider text-[var(--faint)]">
               GTM · Revenue
             </div>
           </div>

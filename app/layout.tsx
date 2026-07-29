@@ -15,9 +15,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "GTM Revenue Tracking — Dcycle",
+  title: "atri · GTM Revenue Tracking",
   description:
     "Unifica paid media (LinkedIn + Google) con resultados de CRM (HubSpot) y orgánico/AEO.",
+  openGraph: {
+    title: "atri · GTM Revenue Tracking",
+    description:
+      "Unifica paid media (LinkedIn + Google) con resultados de CRM (HubSpot) y orgánico/AEO.",
+    images: [{ url: "/brand/atri-lockup.png", width: 1000, height: 1000, alt: "atri" }],
+  },
 };
 
 export default function RootLayout({
