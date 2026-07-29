@@ -12,6 +12,8 @@ import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtPct } from "@/lib/kpis";
 import { monthStatus, daysElapsedAndTotal, projectFullMonth, type MonthStatus } from "@/lib/pacing";
 import { actionUpsertTarget } from "@/app/actions";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { GroupedBars, Donut } from "@/components/ui/charts";
 
 // Overview "Cómo vamos vs Target" — PRD §9 (2), rediseño jul-2026. Antes esta
 // pantalla mostraba el funnel completo (ahora en /metrics); esta versión se
@@ -93,15 +95,66 @@ function projected(value: number, month: string, status: MonthStatus): number | 
   return projectFullMonth(value, month);
 }
 
+// Cabecera alineada a la derecha con tooltip de origen del dato.
+function ThRight({ label, help }: { label: string; help: string }) {
+  return (
+    <th className="px-3 py-2 text-right">
+      <span className="inline-flex flex-row-reverse items-center gap-1">
+        {label}
+        <Tooltip content={help} />
+      </span>
+    </th>
+  );
+}
+
 function DeltaBadge({ pct }: { pct: number | null }) {
   if (pct === null) return <span className="text-xs text-[var(--muted)]">—</span>;
   const cls =
-    pct >= 1
+    pct >= 0.9
       ? "bg-[var(--good-bg)] text-[var(--good-text)]"
-      : pct >= 0.85
+      : pct >= 0.7
         ? "bg-[var(--warn-bg)] text-[var(--warn-text)]"
-        : "bg-red-50 text-red-700";
+        : "bg-[var(--error-bg)] text-[var(--error-text)]";
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{fmtPct(pct)}</span>;
+}
+
+// Stat de resumen: valor grande (real/proyectado) + objetivo + chip de %.
+function SummaryStat({
+  label,
+  actual,
+  target,
+  mode,
+}: {
+  label: string;
+  actual: number | null;
+  target: number;
+  mode: "pipeline" | "spend";
+}) {
+  const pct = target > 0 && actual !== null ? actual / target : null;
+  const tone =
+    pct === null
+      ? "muted"
+      : mode === "spend"
+        ? pct > 1.1 ? "error" : pct > 1 ? "warn" : "good"
+        : pct >= 0.95 ? "good" : pct >= 0.7 ? "warn" : "error";
+  const chip = {
+    good: "bg-[var(--good-bg)] text-[var(--good-text)]",
+    warn: "bg-[var(--warn-bg)] text-[var(--warn-text)]",
+    error: "bg-[var(--error-bg)] text-[var(--error-text)]",
+    muted: "text-[var(--muted)]",
+  }[tone];
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wide text-[var(--muted)]">{label}</span>
+        <span className={`rounded px-1.5 py-0.5 text-xs font-medium tabular-nums ${chip}`}>
+          {pct === null ? "—" : fmtPct(pct)}
+        </span>
+      </div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums">{actual === null ? "—" : fmtEur(actual)}</div>
+      <div className="text-xs text-[var(--muted)]">Objetivo {fmtEur(target)}</div>
+    </div>
+  );
 }
 
 // Pipeline: más que el objetivo es bueno (verde a partir de 100%, ámbar
@@ -125,14 +178,16 @@ function PacingBar({
     pct === null
       ? "bg-[var(--border)]"
       : mode === "spend"
-        ? pct > 1
-          ? "bg-red-600"
-          : "bg-emerald-600"
-        : pct >= 1
-          ? "bg-emerald-600"
-          : pct >= 0.85
-            ? "bg-amber-500"
-            : "bg-red-600";
+        ? pct > 1.1
+          ? "bg-[var(--error-solid)]"
+          : pct > 1
+            ? "bg-[var(--warn-solid)]"
+            : "bg-[var(--good-solid)]"
+        : pct >= 0.95
+          ? "bg-[var(--good-solid)]"
+          : pct >= 0.7
+            ? "bg-[var(--warn-solid)]"
+            : "bg-[var(--error-solid)]";
   return (
     <div className="flex items-center gap-2 px-4 py-2.5">
       <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</span>
@@ -181,10 +236,10 @@ function ScopeTable({
             <tr>
               <th className="px-3 py-2">Canal</th>
               <th className="px-3 py-2 text-right">Spend Obj</th>
-              <th className="px-3 py-2 text-right">Spend Actual</th>
+              <ThRight label="Spend Actual" help="Inversión real de paid media (LinkedIn+Google) vía Supermetrics. En el mes en curso, proyectada a fin de mes." />
               <th className="px-3 py-2 text-right">Δ</th>
               <th className="px-3 py-2 text-right">Pipeline Obj</th>
-              <th className="px-3 py-2 text-right">Pipeline Actual</th>
+              <ThRight label="Pipeline Actual" help="Pipeline € real de deals atribuidos (HubSpot), por utm_campaign. En el mes en curso, proyectado a fin de mes." />
               <th className="px-3 py-2 text-right">Δ</th>
             </tr>
           </thead>
@@ -209,7 +264,7 @@ function ScopeTable({
                   </td>
                   <td
                     className={`px-3 py-2 text-right tabular-nums ${
-                      spendActual !== null && spendActual > r.targetSpend ? "text-red-700" : ""
+                      spendActual !== null && spendActual > r.targetSpend ? "text-[var(--error-text)]" : ""
                     }`}
                   >
                     {spendActual === null ? "—" : fmtEur(spendActual)}
@@ -245,7 +300,7 @@ function ScopeTable({
               <td className="px-3 py-2 text-right tabular-nums">{fmtEur(total.targetSpend)}</td>
               <td
                 className={`px-3 py-2 text-right tabular-nums ${
-                  projTargetSpend !== null && projTargetSpend > total.targetSpend ? "text-red-700" : ""
+                  projTargetSpend !== null && projTargetSpend > total.targetSpend ? "text-[var(--error-text)]" : ""
                 }`}
               >
                 {projTargetSpend === null ? "—" : fmtEur(projTargetSpend)}
@@ -364,6 +419,28 @@ export function OverviewClient({
     });
   }, [campaigns, month, spainRows, restRows]);
 
+  // Serie mensual (todos los meses) para la gráfica de tendencia Objetivo vs Real.
+  const monthlyPipeline = useMemo(
+    () =>
+      allMonths.map((m) => ({
+        month: m,
+        actual: campaigns.filter((c) => c.month === m).reduce((s, c) => s + c.pipeline, 0),
+        target: targetsState.filter((r) => r.month === m).reduce((s, r) => s + r.targetPipeline, 0),
+      })),
+    [allMonths, campaigns, targetsState],
+  );
+
+  // Totales del mes seleccionado + reparto de pipeline por región (para la dona).
+  const totalSel = useMemo(() => sumScope(totalRows), [totalRows]);
+  const spainPipe = useMemo(() => spainRows.reduce((s, r) => s + r.actualPipeline, 0), [spainRows]);
+  const restPipe = useMemo(() => restRows.reduce((s, r) => s + r.actualPipeline, 0), [restRows]);
+  const otherPipe = Math.max(0, totalSel.actualPipeline - spainPipe - restPipe);
+  const regionSplit = [
+    { label: "Spain", value: spainPipe, color: "var(--chart-1)" },
+    { label: "Rest of Intl + DACH", value: restPipe, color: "var(--chart-2)" },
+    { label: "Sin país / Multi", value: otherPipe, color: "var(--chart-6)" },
+  ].filter((d) => d.value > 0);
+
   // El input muestra el total (targets legacy por país + top-up de este
   // bloque). Al editar, solo se recalcula y persiste el top-up — nunca
   // tocamos los targets legacy por país que ya existieran (p. ej. UK, DE).
@@ -413,6 +490,48 @@ export function OverviewClient({
           →
         </button>
         <StatusBadge month={month} status={status} />
+      </div>
+
+      {/* Resumen al principio: totales del mes + reparto (izq) y tendencia (der). */}
+      <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-3">
+        <div className="card flex flex-col p-5">
+          <h3 className="mb-3 text-sm font-semibold">Resumen · {month}</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <SummaryStat
+              label="Pipeline"
+              actual={projected(totalSel.actualPipeline, month, status)}
+              target={totalSel.targetPipeline}
+              mode="pipeline"
+            />
+            <SummaryStat
+              label="Inversión"
+              actual={projected(totalSel.actualSpend, month, status)}
+              target={totalSel.targetSpend}
+              mode="spend"
+            />
+          </div>
+          {regionSplit.length > 0 && (
+            <div className="mt-5 flex-1 border-t border-[var(--border)] pt-4">
+              <div className="mb-3 text-xs uppercase tracking-wide text-[var(--muted)]">Reparto por región</div>
+              <Donut data={regionSplit} size={132} formatValue={(v) => fmtEur(v)} />
+            </div>
+          )}
+        </div>
+
+        <div className="card flex flex-col p-5 lg:col-span-2">
+          <h3 className="mb-3 text-sm font-semibold">Pipeline por mes · Objetivo vs Real</h3>
+          <div className="flex flex-1 items-center">
+            <GroupedBars
+              categories={monthlyPipeline.map((m) => m.month)}
+              series={[
+                { label: "Objetivo", color: "var(--chart-3)", values: monthlyPipeline.map((m) => m.target) },
+                { label: "Real", color: "var(--chart-1)", values: monthlyPipeline.map((m) => m.actual) },
+              ]}
+              formatValue={(v) => fmtEur(v)}
+              height={260}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col gap-4">

@@ -9,6 +9,12 @@ import {
 import type { CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtNum, fmtPct, ctr, cpc, cpm, cpl, cpmql, cpsql, roi, type ChannelMetrics } from "@/lib/kpis";
 import { actionSetCampaignTags } from "@/app/actions";
+import { Tooltip } from "@/components/ui/Tooltip";
+
+// Orígenes del dato para los tooltips de cabecera.
+const PAID = "De Supermetrics (LinkedIn Ads + Google Ads).";
+const CRM = "Del CRM (HubSpot), atribuido por utm_campaign.";
+const MIX = "Cruza coste (Supermetrics) con volumen (HubSpot).";
 
 type AggRow = ChannelMetrics & { campaign: string; channel: string; campaignGroup: string | null; country: string };
 
@@ -26,22 +32,23 @@ function aggregateByCampaign(rows: CampaignRow[]): AggRow[] {
   return [...map.values()].sort((a, b) => b.spend - a.spend);
 }
 
-const cols: { label: string; fn: (r: ChannelMetrics) => string }[] = [
-  { label: "Spend", fn: (r) => fmtEur(r.spend) },
+// help solo en columnas cuyo origen no es obvio; el resto sin ⓘ para no saturar.
+const cols: { label: string; help?: string; fn: (r: ChannelMetrics) => string }[] = [
+  { label: "Spend", help: PAID, fn: (r) => fmtEur(r.spend) },
   { label: "Impr.", fn: (r) => fmtNum(r.impressions) },
   { label: "Clics", fn: (r) => fmtNum(r.clicks) },
   { label: "CTR", fn: (r) => fmtPct(ctr(r)) },
   { label: "CPC", fn: (r) => fmtEur(cpc(r)) },
   { label: "CPM", fn: (r) => fmtEur(cpm(r)) },
-  { label: "Leads", fn: (r) => fmtNum(r.leads) },
+  { label: "Leads", help: CRM, fn: (r) => fmtNum(r.leads) },
   { label: "MQL", fn: (r) => fmtNum(r.mql) },
   { label: "SQL", fn: (r) => fmtNum(r.sql) },
-  { label: "CPL", fn: (r) => fmtEur(cpl(r)) },
+  { label: "CPL", help: `Spend / Leads. ${MIX}`, fn: (r) => fmtEur(cpl(r)) },
   { label: "CPMQL", fn: (r) => fmtEur(cpmql(r)) },
   { label: "CPSQL", fn: (r) => fmtEur(cpsql(r)) },
-  { label: "Pipeline €", fn: (r) => fmtEur(r.pipeline) },
+  { label: "Pipeline €", help: `Importe de deals atribuidos. ${CRM}`, fn: (r) => fmtEur(r.pipeline) },
   { label: "Closed Won", fn: (r) => fmtEur(r.closedWon) },
-  { label: "ROI", fn: (r) => fmtPct(roi(r)) },
+  { label: "ROI", help: "(Pipeline € − Spend) / Spend.", fn: (r) => fmtPct(roi(r)) },
 ];
 
 export function PaidClient({
@@ -103,14 +110,23 @@ export function PaidClient({
               <th className="px-3 py-3">Campaña</th>
               <th className="px-3 py-3">País</th>
               {cols.map((c) => (
-                <th key={c.label} className="px-3 py-3 text-right">{c.label}</th>
+                <th key={c.label} className="px-3 py-3 text-right">
+                  {c.help ? (
+                    <span className="inline-flex flex-row-reverse items-center gap-1">
+                      {c.label}
+                      <Tooltip content={c.help} />
+                    </span>
+                  ) : (
+                    c.label
+                  )}
+                </th>
               ))}
               <th className="px-3 py-3">Etiquetas</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.campaign} className="border-t border-[var(--border)]">
+              <tr key={r.campaign} className="border-t border-[var(--border)] hover:bg-[var(--subtle)]">
                 <td className="px-3 py-3">{r.channel}</td>
                 <td className="px-3 py-3 font-mono text-xs">{r.campaign}</td>
                 <td className="px-3 py-3">{r.country}</td>

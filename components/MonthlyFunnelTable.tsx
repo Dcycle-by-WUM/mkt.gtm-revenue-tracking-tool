@@ -1,19 +1,26 @@
 import type { ChannelMetrics } from "@/lib/kpis";
 import { fmtEur, fmtNum, fmtPct, cpl, cpmql, cpsql, mqlRate, sqlRate, leadToSqlRate, avgPipePerSql } from "@/lib/kpis";
 import { sumMetrics, type CampaignRow } from "@/lib/mock-data";
+import { Tooltip } from "@/components/ui/Tooltip";
+
+// Orígenes del dato para los tooltips de cabecera (de dónde sale cada columna).
+const CRM = "Del CRM (HubSpot). Atribución paid↔CRM por utm_campaign.";
+const PAID = "Coste real de paid media (LinkedIn Ads + Google Ads) vía Supermetrics.";
+const MIX = "Cruza coste (Supermetrics) con volumen del funnel (HubSpot).";
 
 // Tabla de funnel mensual por canal — Overview "Cómo vamos". Réplica de la
 // hoja FORECASTS (METRICAS - SPAIN/INT): filas = mes, columnas = todo el
 // funnel + eficiencia. A diferencia de PivotTable (agrupación libre), esta
 // tabla es de forma fija a propósito, para calcar la hoja 1:1.
 
-const COLUMNS: { label: string; render: (m: ChannelMetrics) => string }[] = [
-  { label: "Leads", render: (m) => fmtNum(m.leads) },
+// help solo en las columnas cuyo origen no es obvio; el resto sin ⓘ para no saturar.
+const COLUMNS: { label: string; help?: string; render: (m: ChannelMetrics) => string }[] = [
+  { label: "Leads", help: CRM, render: (m) => fmtNum(m.leads) },
   { label: "MQL", render: (m) => fmtNum(m.mql) },
   { label: "SQL", render: (m) => fmtNum(m.sql) },
-  { label: "Pipeline €", render: (m) => fmtEur(m.pipeline) },
-  { label: "Spend", render: (m) => fmtEur(m.spend) },
-  { label: "CPL", render: (m) => fmtEur(cpl(m)) },
+  { label: "Pipeline €", help: `Importe de deals atribuidos. ${CRM}`, render: (m) => fmtEur(m.pipeline) },
+  { label: "Spend", help: PAID, render: (m) => fmtEur(m.spend) },
+  { label: "CPL", help: `Spend / Leads. ${MIX}`, render: (m) => fmtEur(cpl(m)) },
   { label: "CPMQL", render: (m) => fmtEur(cpmql(m)) },
   { label: "CPSQL", render: (m) => fmtEur(cpsql(m)) },
   { label: "% Lead→MQL", render: (m) => fmtPct(mqlRate(m)) },
@@ -55,7 +62,16 @@ function Table({
           <tr>
             <th className="px-3 py-2">{rowLabelHeader}</th>
             {COLUMNS.map((c) => (
-              <th key={c.label} className="px-3 py-2 text-right">{c.label}</th>
+              <th key={c.label} className="px-3 py-2 text-right">
+                {c.help ? (
+                  <span className="inline-flex flex-row-reverse items-center gap-1">
+                    {c.label}
+                    <Tooltip content={c.help} />
+                  </span>
+                ) : (
+                  c.label
+                )}
+              </th>
             ))}
           </tr>
         </thead>
@@ -63,7 +79,7 @@ function Table({
           {rows.map((r) => (
             <tr
               key={r.label}
-              className={`border-t border-[var(--border)] ${r.emphasize ? "bg-[var(--subtle)] font-semibold" : ""}`}
+              className={`border-t border-[var(--border)] ${r.emphasize ? "bg-[var(--subtle)] font-semibold" : "hover:bg-[var(--subtle)]"}`}
             >
               <td className="px-3 py-2 font-mono text-xs">{r.label}</td>
               {COLUMNS.map((c) => (

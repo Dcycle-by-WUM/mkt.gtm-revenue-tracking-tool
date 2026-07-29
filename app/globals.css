@@ -1,57 +1,173 @@
 @import "tailwindcss";
 
-/* Tema claro — rediseño jul-2026 (petición de Davide: menos oscuro, más
-   moderno). Todos los componentes consumen SOLO estos tokens; nada de
-   colores sueltos que asuman fondo oscuro. */
+/* ══════════════════════════════════════════════════════════════════════════
+   SISTEMA DE COLOR — GTM Revenue Tracking (rediseño jul-2026)
+   ──────────────────────────────────────────────────────────────────────────
+   Alineado 1:1 con el sistema de diseño real del front de dcycle
+   (dcycle-front-app · src/styles/theme/colors.ts). Misma marca, mismos estados,
+   misma tipografía (Inter) para que esta herramienta se sienta parte del
+   producto dcycle.
+     · Primary blue  #2945FF  → marca, CTAs, enlaces, estados activos.
+     · Accent cyan    #38CFD9 → acentos, datos, highlights.
+     · Éxito #009CA6 · Aviso #FF7629 · Error #FF2990 (estados dcycle).
+
+   Dos capas:
+     1) PRIMITIVAS  → paleta cruda en @theme. Genera utilidades Tailwind
+        (bg-blue-500, text-cyan-500, border-gray-200…) y variables CSS.
+     2) SEMÁNTICAS  → :root con el significado (--text, --accent, --border,
+        estados, dataviz). Es lo que consumen los componentes. Cambiar la marca
+        = cambiar aquí, no en cada pantalla.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── 1) PRIMITIVAS (valores reales de dcycle) ──────────────────────────── */
+@theme {
+  /* Primary blue — marca. 500 (#2945FF) es el primary; 50 (#EFF1FE) el tint
+     de dcycle (primary-blue-10). Periwinkles intermedios = secondary de dcycle. */
+  --color-blue-50:  #eff1fe;
+  --color-blue-100: #e0e5fe;
+  --color-blue-200: #ced2fa;   /* secondary-40 */
+  --color-blue-300: #a6b3f2;   /* secondary-60 */
+  --color-blue-400: #6e86f7;   /* secondary-20 */
+  --color-blue-500: #2945ff;   /* primary-blue */
+  --color-blue-600: #1f37cc;   /* hover */
+  --color-blue-700: #18299b;
+
+  /* Cyan — acento de dcycle (accent-cyan). */
+  --color-cyan-400: #62cef9;   /* tertiary blue-bird */
+  --color-cyan-500: #38cfd9;   /* accent-cyan */
+  --color-cyan-600: #009ca6;   /* success / dark cyan */
+  --color-cyan-hover: #53bbcd; /* accent-cyan-hover */
+
+  /* Grises — anclados en los grises reales de dcycle (warm/cold). */
+  --color-gray-50:  #f8f8fb;   /* base background */
+  --color-gray-100: #fafafa;   /* gray-80 */
+  --color-gray-200: #eaeaea;   /* warm-60 (hairline) */
+  --color-gray-300: #d1d4d8;   /* warm-40 */
+  --color-gray-400: #c4c4c4;   /* warm-20 */
+  --color-gray-500: #a3aab2;   /* gray DEFAULT */
+  --color-gray-600: #6b7684;   /* derivado (meta oscuro) */
+  --color-gray-700: #415062;   /* cold-20 (texto secundario) */
+  --color-gray-900: #252519;   /* black (tinta principal) */
+
+  /* Púrpura — usado en dataviz (iso14064 cat.5). */
+  --color-purple-500: #a855f7;
+}
+
+/* ─── 2) SEMÁNTICAS ─────────────────────────────────────────────────────── */
 :root {
-  --bg: #f6f7f9;             /* lienzo general, gris muy suave */
-  --panel: #ffffff;          /* tarjetas / tablas / sidebar */
-  --border: #e4e7ec;         /* bordes hairline */
-  --text: #101828;           /* tinta principal */
-  --muted: #667085;          /* tinta secundaria */
-  --accent: #0e7a3d;         /* verde Dcycle, legible sobre blanco */
-  --accent-soft: #e8f5ee;    /* fondo suave del accent (chips activos) */
-  --subtle: #f2f4f7;         /* hover / zebra / chips neutros */
-  --subtle-hover: #e9ecf1;
-  --warn-bg: #fffaeb;        /* banners de aviso */
-  --warn-border: #fedf89;
-  --warn-text: #93370d;
-  --good-bg: #ecfdf3;        /* estados positivos (won, cohorte 2026) */
-  --good-text: #067647;
-  --info-bg: #eff8ff;        /* estados informativos */
-  --info-text: #175cd3;
+  /* Superficies */
+  --bg: var(--color-gray-50);          /* lienzo general (#f8f8fb) */
+  --panel: #ffffff;                     /* tarjetas / tablas */
+  --surface-sidebar: #f9f8f7;           /* sidebar (warm off-white de dcycle) */
+  --border: var(--color-gray-200);      /* bordes hairline (#eaeaea) */
+  --border-strong: var(--color-gray-300);
+  --subtle: var(--color-gray-100);      /* hover / zebra / chips neutros */
+  --subtle-hover: var(--color-gray-200);
+
+  /* Tinta */
+  --text: var(--color-gray-900);        /* #252519 */
+  --text-secondary: var(--color-gray-700); /* #415062 */
+  --muted: var(--color-gray-700);       /* metadatos/labels legibles */
+  --faint: var(--color-gray-500);       /* placeholders (#a3aab2) */
+
+  /* Marca / acento */
+  --brand: var(--color-blue-500);       /* #2945FF */
+  --brand-hover: var(--color-blue-600); /* #1F37CC */
+  --brand-contrast: #ffffff;            /* texto/icono sobre relleno azul */
+  --brand-soft: var(--color-blue-50);   /* fondo activo/chips (#EFF1FE) */
+  --cyan: var(--color-cyan-500);        /* acento secundario #38CFD9 */
+  --cyan-strong: var(--color-cyan-600); /* #009CA6 */
+
+  /* Alias que consumen los componentes existentes */
+  --accent: var(--color-blue-500);      /* enlaces, texto activo, iconos */
+  --accent-soft: var(--color-blue-50);  /* fondo de chips / nav activa (texto azul) */
+
+  /* Estados — sistema de dcycle. Solo feedback, nunca decorativos.
+       good  = éxito / positivo / en-objetivo   → teal   #009CA6 / bg #EBFAFB
+       warn  = atención                          → naranja #FF7629 / bg tint
+       error = crítico / fallo                   → rosa   #FF2990 / bg #FFEAF4
+       info  = neutro informativo                → azul   #2945FF / bg #EFF1FE
+     Cada estado: bg (fondo suave), text (texto/icono legible sobre bg — se usa
+     una variante algo más oscura del hue de dcycle para cumplir contraste en
+     texto pequeño), solid (relleno pleno = hue de marca del estado). */
+  --good-bg: #ebfafb;   --good-text: #007d85;  --good-solid: #009ca6;  --good-border: #b3e6e9;
+  --warn-bg: #fff3ea;   --warn-text: #b93815;  --warn-solid: #ff7629;  --warn-border: #ffd6b8;
+  --error-bg: #ffeaf4;  --error-text: #c11574; --error-solid: #ff2990; --error-border: #ffcce4;
+  --info-bg: #eff6ff;   --info-text: #1d4ed8;  --info-solid: #3b82f6;  --info-border: #bfdbfe;
+
+  /* Dataviz — paleta categórica exacta de dcycle (iso14064). */
+  --chart-1: #2945ff;   /* azul     */
+  --chart-2: #38cfd9;   /* cyan     */
+  --chart-3: #94a3ff;   /* azul claro */
+  --chart-4: #009ca6;   /* teal     */
+  --chart-5: #a855f7;   /* púrpura  */
+  --chart-6: #ced2fa;   /* periwinkle */
+
+  /* Sombras — tintadas de azul, firma visual de dcycle (nunca negro puro). */
+  --shadow-sm: 0 1px 2px 0 rgba(41, 69, 255, 0.06);
+  --shadow-md: 0 2px 8px 0 rgba(41, 69, 255, 0.12);
+  --shadow-lg: 0 2px 14px 0 rgba(41, 69, 255, 0.22);
 }
 
 html,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Inter se inyecta vía next/font en layout.tsx (--font-inter) — misma
+     tipografía que el front de dcycle. */
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.03em;   /* firma tipográfica exacta de dcycle */
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Titulares algo más ceñidos, como en dcycle. */
+h1, h2, h3 {
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+/* Los controles de formulario NO heredan la fuente por defecto (salían en la
+   fuente del sistema, no Inter). Forzamos herencia para que toda cifra escrita
+   en inputs/selects use Inter con el mismo tracking. */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  letter-spacing: inherit;
 }
 
 ::selection {
-  background: var(--accent-soft);
+  background: var(--brand);
+  color: #ffffff;
 }
 
 /* Tarjeta estándar: borde hairline + sombra apenas perceptible. */
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  border-radius: 0.75rem;    /* 12px */
+  box-shadow: var(--shadow-sm);
 }
 
 /* Controles de formulario coherentes en toda la app. */
 .control {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: 0.5rem;     /* 8px */
   padding: 0.375rem 0.75rem;
   font-size: 0.875rem;
   color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.control:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.control:hover {
+  border-color: var(--border-strong);
+}
+.control:focus,
+.control:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(41, 69, 255, 0.15);
 }

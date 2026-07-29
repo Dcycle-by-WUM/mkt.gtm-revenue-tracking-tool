@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 const BADGE: Record<string, string> = {
   ok: "bg-[var(--good-bg)] text-[var(--good-text)]",
   pending: "bg-[var(--warn-bg)] text-[var(--warn-text)]",
-  blocked: "bg-red-50 text-red-700",
+  blocked: "bg-[var(--error-bg)] text-[var(--error-text)]",
 };
 const LABEL: Record<string, string> = {
   ok: "OK",

@@ -1,11 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { ExternalLink } from "lucide-react";
 import { FilterBar } from "@/components/FilterBar";
 import { emptyFilters, inMonthRange } from "@/lib/mock-data";
 import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur } from "@/lib/kpis";
 import { dealState, leadCohort, type DealRow, type DealState, type LeadCohort } from "@/lib/data/deals";
+
+// Portal de HubSpot para deep-links a cada deal. Se configura en el entorno
+// (NEXT_PUBLIC_HUBSPOT_PORTAL_ID); si no está, no se muestra el enlace (así no
+// generamos links rotos en mock/local).
+const HS_PORTAL = process.env.NEXT_PUBLIC_HUBSPOT_PORTAL_ID;
+const hubspotDealUrl = (dealId: string) =>
+  HS_PORTAL ? `https://app.hubspot.com/contacts/${HS_PORTAL}/record/0-3/${dealId}` : null;
 
 const COHORT_BADGE: Record<LeadCohort, string> = {
   "2026": "bg-[var(--good-bg)] text-[var(--good-text)]",
@@ -135,7 +143,20 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
               return (
                 <tr key={r.dealId} className="border-t border-[var(--border)]">
                   <td className="px-4 py-2.5">
-                    {r.dealname}
+                    <span className="inline-flex items-center gap-1.5">
+                      {r.dealname}
+                      {hubspotDealUrl(r.dealId) && (
+                        <a
+                          href={hubspotDealUrl(r.dealId)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Ver en HubSpot"
+                          className="text-[var(--faint)] transition-colors hover:text-[var(--brand)]"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </span>
                     <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${STATE_BADGE[dealState(r)]}`}>
                       {STATE_LABEL[dealState(r)]}
                     </span>
