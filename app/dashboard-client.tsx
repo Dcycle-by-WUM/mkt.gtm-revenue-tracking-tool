@@ -16,9 +16,11 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  GripVertical,
 } from "lucide-react";
 import { sumMetrics, groupBy, type CampaignRow, type ForecastRow } from "@/lib/mock-data";
 import { fmtEur, fmtNum, fmtPct, roi, cpl, cpmql } from "@/lib/kpis";
+import { leadCohort, type DealRow, type LeadCohort } from "@/lib/data/deals";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 // Orígenes del dato — reutilizados en tooltips (coherentes con Data Health).
@@ -42,15 +44,18 @@ const DEFAULT_ORDER = ["kpis", "funnel", "pace", "channels", "alerts", "quicklin
 export function DashboardClient({
   campaigns,
   targets,
+  deals = [],
 }: {
   campaigns: CampaignRow[];
   targets: ForecastRow[];
+  deals?: DealRow[];
 }) {
   const [scope, setScope] = useState<"month" | "ytd">("month");
 
   // Layout personalizable persistido en localStorage (por navegador).
   const [order, setOrder] = useState<string[]>(DEFAULT_ORDER);
   const [hydrated, setHydrated] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LS_KEY);
@@ -112,6 +117,18 @@ export function DashboardClient({
     const tgt = targetRows.filter((r) => r.channel === c.name).reduce((s, r) => s + r.targetSpend, 0);
     return tgt > 0 && c.m.spend > tgt;
   });
+
+  // Cross-section: pipeline de deals por cohorte del lead (de Deals & Atribución).
+  const dealsByCohort = useMemo(() => {
+    const inYear = deals.filter((d) => (scope === "month" ? d.month === activeMonth : d.month.startsWith(year)));
+    const labels: Record<LeadCohort, string> = { "2026": "Leads 2026", "histórico": "Leads históricos", "sin contacto": "Sin contacto" };
+    return (Object.keys(labels) as LeadCohort[]).map((c) => ({
+      name: labels[c],
+      amount: inYear.filter((d) => leadCohort(d) === c).reduce((s, d) => s + d.amount, 0),
+      count: inYear.filter((d) => leadCohort(d) === c).length,
+    }));
+  }, [deals, scope, activeMonth, year]);
+  const maxCohort = Math.max(1, ...dealsByCohort.map((c) => c.amount));
 
   const scopeLabel = scope === "month" ? `mes ${activeMonth}` : `año ${year} (YTD)`;
 
@@ -209,6 +226,30 @@ export function DashboardClient({
           </div>
         ),
     },
+    dealsCohort: {
+      title: "Pipeline de deals por cohorte",
+      span: 2,
+      node: (
+        <div className="space-y-3">
+          {dealsByCohort.map((c) => (
+            <div key={c.name}>
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="font-medium">{c.name}</span>
+                <span className="tabular-nums text-[var(--muted)]">
+                  {fmtEur(c.amount)} · {c.count} deals
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-[var(--subtle)]">
+                <div className="h-full rounded-full bg-[var(--chart-4)]" style={{ width: `${(c.amount / maxCohort) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+          <Link href="/deals" className="inline-block pt-1 text-xs text-[var(--accent)] hover:underline">
+            Ver Deals & Atribución →
+          </Link>
+        </div>
+      ),
+    },
     quicklinks: {
       title: "Accesos directos",
       span: 3,
@@ -239,6 +280,19 @@ export function DashboardClient({
   const add = (id: string) => persist([...visible, id]);
   const reset = () => persist(DEFAULT_ORDER);
 
+  // Drag & drop nativo (sin dependencias): reordena la lista de módulos visibles.
+  const onDropOn = (overId: string) => {
+    if (!dragId || dragId === overId) return setDragId(null);
+    const next = [...visible];
+    const from = next.indexOf(dragId);
+    const to = next.indexOf(overId);
+    if (from < 0 || to < 0) return setDragId(null);
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    persist(next);
+    setDragId(null);
+  };
+
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -254,14 +308,23 @@ export function DashboardClient({
           const mod = MODULES[id];
           const spanCls = mod.span === 3 ? "lg:col-span-3" : mod.span === 2 ? "lg:col-span-2" : "lg:col-span-1";
           return (
-            <div key={id} className={spanCls}>
+            <div
+              key={id}
+              className={`${spanCls} ${dragId && dragId !== id ? "transition-transform" : ""}`}
+              onDragOver={(e) => { if (dragId) e.preventDefault(); }}
+              onDrop={() => onDropOn(id)}
+            >
               <ModuleCard
                 title={mod.title}
+                dragging={dragId === id}
+                dimmed={!!dragId && dragId !== id}
                 canUp={i > 0}
                 canDown={i < visible.length - 1}
                 onUp={() => move(id, -1)}
                 onDown={() => move(id, 1)}
                 onRemove={() => remove(id)}
+                onDragStart={() => setDragId(id)}
+                onDragEnd={() => setDragId(null)}
               >
                 {mod.node}
               </ModuleCard>
@@ -273,7 +336,7 @@ export function DashboardClient({
   );
 }
 
-// ── Wrapper de módulo con menú ⋯ (Subir / Bajar / Quitar) ──────────────────
+// ── Wrapper de módulo: handle de arrastre + menú ⋯ ─────────────────────────
 function ModuleCard({
   title,
   children,
@@ -282,6 +345,10 @@ function ModuleCard({
   onUp,
   onDown,
   onRemove,
+  dragging,
+  dimmed,
+  onDragStart,
+  onDragEnd,
 }: {
   title: string;
   children: React.ReactNode;
@@ -290,13 +357,33 @@ function ModuleCard({
   onUp: () => void;
   onDown: () => void;
   onRemove: () => void;
+  dragging?: boolean;
+  dimmed?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <section className="card flex h-full flex-col p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <div className="relative">
+    <section
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`card flex h-full flex-col p-5 transition-all ${
+        dragging ? "scale-[0.99] opacity-50 ring-2 ring-[var(--brand)]" : dimmed ? "opacity-90" : ""
+      }`}
+    >
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className="cursor-grab text-[var(--faint)] transition-colors hover:text-[var(--muted)] active:cursor-grabbing"
+            title="Arrastra para reordenar"
+            aria-hidden
+          >
+            <GripVertical className="h-4 w-4" />
+          </span>
+          <h3 className="truncate text-sm font-semibold">{title}</h3>
+        </div>
+        <div className="relative shrink-0">
           <button
             onClick={() => setOpen((v) => !v)}
             className="rounded-md p-1 text-[var(--faint)] transition-colors hover:bg-[var(--subtle)] hover:text-[var(--text)]"
