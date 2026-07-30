@@ -20,7 +20,7 @@ export function GroupedBars({
 }) {
   const W = 720;
   const H = height;
-  const padL = 8;
+  const padL = 46; // canaleta reservada para las etiquetas del eje Y (evita solape)
   const padR = 8;
   const padB = 28;
   const padT = 12;
@@ -35,18 +35,24 @@ export function GroupedBars({
   const barW = Math.max(6, (groupW * 0.62 - barGap * (nSer - 1)) / nSer);
 
   const gridLines = 4;
+  // Etiquetas del eje compactas (315k, 1,2M) para que no se solapen.
+  const axisLabel = (v: number) => {
+    if (v >= 1e6) return `${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1).replace(".", ",")}M`;
+    if (v >= 1e3) return `${Math.round(v / 1e3)}k`;
+    return String(Math.round(v));
+  };
 
   return (
     <div className="w-full overflow-hidden">
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="xMidYMid meet" role="img">
-        {/* líneas guía */}
+        {/* líneas guía + etiquetas del eje Y (canaleta izquierda, centradas en la línea) */}
         {Array.from({ length: gridLines + 1 }).map((_, i) => {
           const y = padT + (plotH / gridLines) * i;
           return (
             <g key={i}>
               <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="var(--border)" strokeWidth={1} />
-              <text x={padL} y={y - 4} fontSize={10} fill="var(--faint)">
-                {formatValue(Math.round(max * (1 - i / gridLines)))}
+              <text x={padL - 6} y={y} fontSize={10} fill="var(--faint)" textAnchor="end" dominantBaseline="middle">
+                {axisLabel(Math.round(max * (1 - i / gridLines)))}
               </text>
             </g>
           );
