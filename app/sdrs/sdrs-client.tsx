@@ -70,10 +70,11 @@ export function SdrsClient({
   const callValues = months.map((m) => callsByMonth[m] ?? 0);
   const pipeValues = months.map((m) => pipeByMonth[m] ?? 0);
   const dialerValues = months.map((m) => sdr.dialer.byMonth[m] ?? 0);
-  // Pipe por cada 1.000 llamadas, por mes (pipe región / (llamadas sel. / 1000)).
+  // Nº de llamadas necesarias para generar 1.000 € de pipe (región), por mes:
+  // llamadas seleccionadas ÷ (pipe / 1.000). Menos llamadas = más eficiente.
   const effValues = months.map((m) => {
-    const calls = callsByMonth[m] ?? 0;
-    return calls > 0 ? (pipeByMonth[m] ?? 0) / (calls / 1000) : 0;
+    const pipe = pipeByMonth[m] ?? 0;
+    return pipe > 0 ? (callsByMonth[m] ?? 0) / (pipe / 1000) : 0;
   });
 
   const shownReps = showAll ? selectedReps : selectedReps.slice(0, 15);
@@ -169,16 +170,16 @@ export function SdrsClient({
         </Panel>
       </div>
 
-      {/* Eficiencia por mes: pipe (región) por cada 1.000 llamadas (seleccionados). */}
-      <Panel title={`Pipe por cada 1.000 llamadas, por mes · ${regionLabel}`}>
+      {/* Eficiencia por mes: nº de llamadas necesarias para 1.000 € de pipe. */}
+      <Panel title={`Llamadas necesarias para generar 1.000 € de pipe, por mes · ${regionLabel}`}>
         <p className="mb-3 text-xs text-[var(--muted)]">
-          Pipe abierto ({regionLabel}) ÷ (llamadas de los SDRs seleccionados / 1.000). Meses sin
-          llamadas de la selección salen como "–".
+          Llamadas de los SDRs seleccionados ÷ (pipe abierto ({regionLabel}) / 1.000).{" "}
+          <strong>Menos llamadas = más eficiente.</strong> Meses sin pipe de la región salen como "–".
         </p>
         <GroupedBars
           categories={categories}
-          series={[{ label: "€ / 1.000 llamadas", color: "var(--good-text)", values: effValues }]}
-          formatValue={(v) => fmtEur(v)}
+          series={[{ label: "Llamadas / 1.000 € pipe", color: "var(--good-text)", values: effValues }]}
+          formatValue={(v) => (v > 0 ? `${v.toFixed(1).replace(".", ",")} llamadas` : "–")}
         />
       </Panel>
 
