@@ -59,9 +59,8 @@ function fromOrganicDbRow(r: DbKpiOrganicByMonth): CampaignRow {
 }
 
 async function listOrganicRows(sb: SupabaseClient): Promise<CampaignRow[]> {
-  const { data } = await sb.from("kpi_organic_by_month").select("*");
-  if (!data) return [];
-  return (data as DbKpiOrganicByMonth[]).map(fromOrganicDbRow);
+  const rows = await fetchAll<DbKpiOrganicByMonth>(() => sb.from("kpi_organic_by_month").select("*"));
+  return rows.map(fromOrganicDbRow);
 }
 
 // Mapea `hs_analytics_source` (la "original source" de HubSpot) al canal
@@ -176,15 +175,18 @@ export async function listCampaigns(): Promise<CampaignRow[]> {
 
   // Paid (vista materializada, paid × CRM cross) + Orgánico corren siempre
   // en paralelo — el orgánico NO es un fallback del paid, son buckets
-  // independientes que se muestran juntos.
-  const [paidRes, organicRows] = await Promise.all([
-    sb.from("kpi_by_campaign_month").select("*").order("spend", { ascending: false }),
+  // independientes que se muestran juntos. Paginado con fetchAll: PostgREST
+  // corta en 1000 filas por defecto, y al ordenar por spend DESC las filas
+  // "Sin campaña" (spend 0€ con pipeline real de deals sin campaña
+  // matcheada) quedan al final — justo las que se perdían sin paginar.
+  const [paidRowsRaw, organicRows] = await Promise.all([
+    fetchAll<DbKpiByCampaignMonth>(() =>
+      sb.from("kpi_by_campaign_month").select("*").order("spend", { ascending: false }),
+    ),
     listOrganicRows(sb),
   ]);
 
-  const paidRows = paidRes.data && paidRes.data.length > 0
-    ? (paidRes.data as DbKpiByCampaignMonth[]).map(fromDbRow)
-    : [];
+  const paidRows = paidRowsRaw.map(fromDbRow);
 
   if (paidRows.length > 0 || organicRows.length > 0) {
     return collapseNonPaidCountries([...paidRows, ...organicRows]);
