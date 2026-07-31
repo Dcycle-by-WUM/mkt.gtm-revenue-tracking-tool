@@ -158,6 +158,18 @@ export async function runCrmSync(trigger: "hubspot" | "hubspot-manual" = "hubspo
   const run = await startedRun(trigger);
   console.log(`[sync-crm] run started id=${run.id} trigger=${trigger}`);
 
+  // Owners PRIMERO: es barato (2-3 páginas) y resuelve id→nombre para SDRs
+  // Overview. Va al principio para que se poble SIEMPRE, aunque un paso pesado
+  // posterior (contacts/deals) agote el tiempo del botón/cron. Independiente
+  // del gate ABM_ENABLED. Las LLAMADAS no van aquí (decenas de miles): se
+  // ingieren en su propia scheduled function `sync-calls` (runCallsSync).
+  const owners = await runStep(
+    "owners",
+    fetchOwners as () => Promise<Record<string, unknown>[]>,
+    "owners",
+    "id",
+  );
+
   const contacts = await runStep(
     "contacts",
     fetchContacts as () => Promise<Record<string, unknown>[]>,
@@ -202,17 +214,6 @@ export async function runCrmSync(trigger: "hubspot" | "hubspot-manual" = "hubspo
   } else {
     console.warn(`[sync-crm] skipped refresh_kpi_views — un paso previo falló`);
   }
-
-  // Owners: siempre (barato — 2-3 páginas). Resuelve id→nombre para SDRs
-  // Overview. Independiente del gate ABM_ENABLED. Las LLAMADAS NO van aquí: son
-  // decenas de miles y harían timeout al botón/cron; se ingieren en su propia
-  // función de background (`runCallsSync` / `sync-calls-background`).
-  const owners = await runStep(
-    "owners",
-    fetchOwners as () => Promise<Record<string, unknown>[]>,
-    "owners",
-    "id",
-  );
 
   let engagements: StepResult = { fetched: 0, upserted: 0 };
   if (process.env.ABM_ENABLED === "true") {
