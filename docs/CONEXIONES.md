@@ -73,14 +73,17 @@ spend → leads → MQL → SQL → pipeline → revenue por canal / campaña / 
 | **Contact (Heat Score §H)** | `num_conversion_events`, `recent_conversion_date`, `recent_conversion_event_name`, `first_conversion_event_name`, `hs_email_last_open_date`, `hs_email_open`, `hs_email_click`, `hs_email_replied`, `hs_analytics_num_page_views`, `hs_email_optout`, `num_contacted_notes` | Señales de intención |
 | **Deal** | `amount`, `amount_in_home_currency`, `dealstage`, `pipeline`, `createdate`, `closedate` + asociación a contacto/empresa | SQL, Pipeline €, Closed Won |
 | **Company** | `name`, `domain`, `industry`, `country`, `hubspot_owner_id`, `is_target_abm` (propiedad custom a crear) | ABM |
+| **Call** | `hs_call_title`, `hs_timestamp`, `hubspot_owner_id` (SDR) + asociación a contacto/empresa | SDRs Overview (llamadas por comercial × mes) |
+| **Owner** | `/crm/v3/owners`: `id`, `firstName`, `lastName`, `email`, `archived` | Resolver owner id→nombre y estado (Active/Left) |
 | **Engagements** | meetings / notes / emails (timeline) | Account Timeline |
 
 - **Definiciones de negocio (confirmadas en datos reales):**
   - **MQL** = `hs_lead_status` ∉ {`MK NOT QUALIFIED`, vacío}.
   - **SQL** = contacto con Deal de `amount > 0`.
   - **Closed Won** = deals con `dealstage` = Closed Won.
-- **Dónde acaba:** tablas `contacts`, `deals`, `accounts`, `activities`, `heat_scores`.
-- **Lo usa:** todo el funnel (Overview, Paid, Forecast), ABM y Heat Score.
+- **Ventana de ingesta (env):** `HUBSPOT_BACKFILL_FROM` (contactos/deals, default `2025-12-01`) y `HUBSPOT_CALLS_FROM` (solo llamadas, default `2025-06-01` — la serie de SDRs arranca en jun-2025). Las llamadas y los owners se sincronizan **siempre**, con independencia de `ABM_ENABLED` (que solo controla el timeline completo meetings/notes/emails).
+- **Dónde acaba:** tablas `contacts`, `deals`, `accounts`, `activities` (con `owner_id`), `owners`, `heat_scores`.
+- **Lo usa:** todo el funnel (Overview, Paid, Forecast), SDRs Overview (`/sdrs`), ABM y Heat Score.
 
 ## 4. Supabase — proyecto Postgres + Auth
 

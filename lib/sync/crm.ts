@@ -9,6 +9,8 @@ import {
   fetchDealLinkedContacts,
   fetchDealLinkedCompanies,
   fetchEngagements,
+  fetchCalls,
+  fetchOwners,
 } from "@/lib/hubspot";
 import { requireSupabaseAdmin } from "@/lib/supabase/admin";
 
@@ -141,6 +143,21 @@ export async function runCrmSync(trigger: "hubspot" | "hubspot-manual" = "hubspo
     console.warn(`[sync-crm] skipped refresh_kpi_views — un paso previo falló`);
   }
 
+  // Owners + llamadas: siempre (métrica SDRs Overview). Independientes del gate
+  // ABM_ENABLED, que solo controla el timeline completo (meetings/notes/emails).
+  const owners = await runStep(
+    "owners",
+    fetchOwners as () => Promise<Record<string, unknown>[]>,
+    "owners",
+    "id",
+  );
+  const calls = await runStep(
+    "calls",
+    fetchCalls as () => Promise<Record<string, unknown>[]>,
+    "activities",
+    "hubspot_engagement_id",
+  );
+
   let engagements: StepResult = { fetched: 0, upserted: 0 };
   if (process.env.ABM_ENABLED === "true") {
     engagements = await runStep(
@@ -153,10 +170,11 @@ export async function runCrmSync(trigger: "hubspot" | "hubspot-manual" = "hubspo
     console.log("[sync-crm] engagements: omitido (ABM on hold; ABM_ENABLED=true para ingerirlos)");
   }
 
-  const breakdown = { contacts, deals, companies, dealsLinkedContacts, engagements };
+  const breakdown = { contacts, deals, companies, dealsLinkedContacts, owners, calls, engagements };
   const total =
-    contacts.upserted + deals.upserted + companies.upserted + dealsLinkedContacts.upserted + engagements.upserted;
-  const errors = [contacts, deals, companies, dealsLinkedContacts, engagements]
+    contacts.upserted + deals.upserted + companies.upserted + dealsLinkedContacts.upserted +
+    owners.upserted + calls.upserted + engagements.upserted;
+  const errors = [contacts, deals, companies, dealsLinkedContacts, owners, calls, engagements]
     .map((s) => s.error)
     .filter(Boolean) as string[];
 

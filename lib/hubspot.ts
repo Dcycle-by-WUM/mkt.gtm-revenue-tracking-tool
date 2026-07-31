@@ -163,6 +163,13 @@ async function pageAll<T>(
 function backfillFrom(): string {
   return process.env.HUBSPOT_BACKFILL_FROM || "2025-12-01T00:00:00Z";
 }
+// Ventana propia para las llamadas (métrica SDRs Overview). Arranca antes que
+// el backfill general (dic-2025) porque la serie de llamadas por SDR se mide
+// desde jun-2025. No afecta a la ingesta de contactos/deals.
+//   HUBSPOT_CALLS_FROM — fecha mínima de hs_timestamp (ISO). Default: 2025-06-01.
+function callsFrom(): string {
+  return process.env.HUBSPOT_CALLS_FROM || "2025-06-01T00:00:00Z";
+}
 function contactLeadSources(): string[] {
   const raw = process.env.HUBSPOT_CONTACT_LEAD_SOURCES;
   if (raw === undefined) return ["Inbound"];
@@ -535,6 +542,7 @@ export type HsEngagement = {
   hubspot_engagement_id: string;
   kind: "meeting" | "note" | "email" | "call";
   occurred_at: string;
+  owner_id: string | null;
   hubspot_contact_id: string | null;
   hubspot_company_id: string | null;
   body: string | null;
@@ -547,32 +555,84 @@ const ENGAGEMENT_PATHS: { path: string; kind: HsEngagement["kind"]; bodyProp: st
   { path: "/crm/v3/objects/calls", kind: "call", bodyProp: "hs_call_title" },
 ];
 
-export async function fetchEngagements(): Promise<HsEngagement[]> {
-  const cutoffMs = new Date(backfillFrom()).getTime();
-  const all: HsEngagement[] = [];
-  for (const { path, kind, bodyProp } of ENGAGEMENT_PATHS) {
-    const records = await pageAll<HsRecord & {
-      associations?: {
-        contacts?: { results: { id: string }[] };
-        companies?: { results: { id: string }[] };
-      };
-    }>(path, {
-      properties: [bodyProp, "hs_timestamp"],
-      associations: ["contacts", "companies"],
+// Ingesta de UN tipo de engagement. Las llamadas usan su propia ventana
+// (`callsFrom`), el resto el backfill general. Incluye `hubspot_owner_id` para
+// poder atribuir la llamada al SDR.
+async function fetchEngagementPath(
+  cfg: { path: string; kind: HsEngagement["kind"]; bodyProp: string },
+): Promise<HsEngagement[]> {
+  const cutoffMs = new Date(cfg.kind === "call" ? callsFrom() : backfillFrom()).getTime();
+  const records = await pageAll<HsRecord & {
+    associations?: {
+      contacts?: { results: { id: string }[] };
+      companies?: { results: { id: string }[] };
+    };
+  }>(cfg.path, {
+    properties: [cfg.bodyProp, "hs_timestamp", "hubspot_owner_id"],
+    associations: ["contacts", "companies"],
+  });
+  const out: HsEngagement[] = [];
+  for (const r of records) {
+    const occurred = r.properties.hs_timestamp ?? r.properties.createdate;
+    if (!occurred) continue;
+    if (new Date(occurred).getTime() < cutoffMs) continue;
+    out.push({
+      hubspot_engagement_id: r.id,
+      kind: cfg.kind,
+      occurred_at: occurred,
+      owner_id: r.properties.hubspot_owner_id ?? null,
+      hubspot_contact_id: r.associations?.contacts?.results?.[0]?.id ?? null,
+      hubspot_company_id: r.associations?.companies?.results?.[0]?.id ?? null,
+      body: r.properties[cfg.bodyProp] ?? null,
     });
-    for (const r of records) {
-      const occurred = r.properties.hs_timestamp ?? r.properties.createdate;
-      if (!occurred) continue;
-      if (new Date(occurred).getTime() < cutoffMs) continue;
-      all.push({
-        hubspot_engagement_id: r.id,
-        kind,
-        occurred_at: occurred,
-        hubspot_contact_id: r.associations?.contacts?.results?.[0]?.id ?? null,
-        hubspot_company_id: r.associations?.companies?.results?.[0]?.id ?? null,
-        body: r.properties[bodyProp] ?? null,
-      });
-    }
+  }
+  return out;
+}
+
+export async function fetchEngagements(): Promise<HsEngagement[]> {
+  const all: HsEngagement[] = [];
+  for (const cfg of ENGAGEMENT_PATHS) {
+    all.push(...(await fetchEngagementPath(cfg)));
   }
   return all;
+}
+
+// Solo llamadas (kind='call'), con owner y ventana propia. Alimenta la métrica
+// SDRs Overview sin depender del timeline ABM completo (que está on hold).
+export async function fetchCalls(): Promise<HsEngagement[]> {
+  const cfg = ENGAGEMENT_PATHS.find((c) => c.kind === "call")!;
+  return fetchEngagementPath(cfg);
+}
+
+// Owners de HubSpot (/crm/v3/owners) para resolver id→nombre y estado. La API
+// devuelve por defecto solo los activos; pedimos también los archivados
+// (personas que dejaron el equipo) para no perder su nombre en el histórico.
+export type HsOwner = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  archived: boolean;
+};
+
+type HsOwnerRecord = {
+  id: string | number;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  archived?: boolean;
+};
+
+export async function fetchOwners(): Promise<HsOwner[]> {
+  const map = (list: HsOwnerRecord[], archived: boolean): HsOwner[] =>
+    list.map((o) => ({
+      id: String(o.id),
+      first_name: o.firstName ?? null,
+      last_name: o.lastName ?? null,
+      email: o.email ?? null,
+      archived,
+    }));
+  const active = await pageAll<HsOwnerRecord>("/crm/v3/owners", {}, "owners");
+  const gone = await pageAll<HsOwnerRecord>("/crm/v3/owners", { archived: "true" }, "owners-archived");
+  return [...map(active, false), ...map(gone, true)];
 }
