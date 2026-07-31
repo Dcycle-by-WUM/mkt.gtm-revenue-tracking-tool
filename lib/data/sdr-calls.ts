@@ -34,6 +34,13 @@ export type SdrCallsData = {
 type DbCall = { owner_id: string | null; occurred_at: string | null };
 type DbOwner = { id: string; first_name: string | null; last_name: string | null; archived: boolean | null };
 
+// Comerciales excluidos SIEMPRE del análisis (decisión de negocio): no cuentan
+// en totales, matriz ni ratios. Comparación sin acentos y en minúsculas.
+const EXCLUDED_NAMES = new Set(["lucia mosquera"]);
+const norm = (s: string): string =>
+  s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+const isExcluded = (name: string): boolean => EXCLUDED_NAMES.has(norm(name));
+
 // Mock para previews sin Supabase — subconjunto ilustrativo (números tipo Excel
 // `dcycle_calls_per_sdr.xlsx`). Suficiente para ver el layout de la pantalla.
 const MOCK_MONTHS = ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07"];
@@ -55,8 +62,9 @@ function buildMock(): SdrCallsData {
     mockRep("3", "Lucas Abad Revert", "Active", [799, 511, 531, 741, 286]),
     mockRep("4", "Jorge Latorre Escudero", "Active", [740, 565, 651, 733, 79]),
     mockRep("5", "Óscar Davies Bermejo", "Active", [338, 825, 654, 1063, 143]),
-    mockRep("6", "Lucía Mosquera", "Active", [68, 81, 72, 53, 54]),
-  ].sort((a, b) => b.total - a.total);
+  ]
+    .filter((r) => !isExcluded(r.name))
+    .sort((a, b) => b.total - a.total);
   const dialer = finalizeRow({
     ownerId: null,
     name: "Dialer / integración (sin owner)",
@@ -162,10 +170,12 @@ export async function listSdrCalls(): Promise<SdrCallsData> {
       continue;
     }
     const o = ownerById.get(key);
+    const name = ownerName(o, key);
+    if (isExcluded(name)) continue; // Lucía Mosquera y demás excluidos fijos
     reps.push(
       finalizeRow({
         ownerId: key,
-        name: ownerName(o, key),
+        name,
         status: o?.archived ? "Left" : "Active",
         byMonth: v.byMonth,
       }),
