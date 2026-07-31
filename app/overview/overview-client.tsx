@@ -152,7 +152,7 @@ function SummaryStat({
         </span>
       </div>
       <div className="mt-1 text-2xl font-semibold tabular-nums">{actual === null ? "—" : fmtEur(actual)}</div>
-      <div className="text-xs text-[var(--muted)]">Objetivo {fmtEur(target)}</div>
+      <div className="text-xs text-[var(--muted)]">{mode === "spend" ? "Budget" : "Objetivo"} {fmtEur(target)}</div>
     </div>
   );
 }
