@@ -36,6 +36,7 @@ export async function actionUpsertNote(kind: NoteKind, key: string, body: string
 export async function actionUpsertTarget(t: ForecastRow): Promise<void> {
   await upsertTarget(t);
   revalidatePath("/");
+  revalidatePath("/overview");
 }
 
 export async function actionSetCampaignTags(campaign: string, tags: string[]): Promise<void> {

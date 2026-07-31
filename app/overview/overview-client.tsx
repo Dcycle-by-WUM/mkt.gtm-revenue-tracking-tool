@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   CHANNELS,
   NO_COUNTRY,
@@ -371,6 +371,29 @@ export function OverviewClient({
   const [targetsState, setTargetsState] = useState(targets);
   const [, startTransition] = useTransition();
 
+  // Guardado con debounce: los inputs de Obj disparan onChange en cada
+  // tecla; sin esto, cada pulsación lanzaba su propio actionUpsertTarget y,
+  // al no garantizarse el orden de respuesta de la red, un request de un
+  // valor parcial podía llegar después del final y "borrar" lo escrito.
+  // Solo se persiste el último valor 500ms después de dejar de teclear.
+  const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const timers = saveTimers.current;
+    return () => timers.forEach((t) => clearTimeout(t));
+  }, []);
+  const scheduleSave = (row: ForecastRow) => {
+    const key = `${row.channel}|${row.month}|${row.country}`;
+    const existing = saveTimers.current.get(key);
+    if (existing) clearTimeout(existing);
+    saveTimers.current.set(
+      key,
+      setTimeout(() => {
+        saveTimers.current.delete(key);
+        startTransition(() => { void actionUpsertTarget(row); });
+      }, 500),
+    );
+  };
+
   const allMonths = useMemo(
     () => [...new Set([...campaigns.map((c) => c.month), ...targetsState.map((t) => t.month)])].sort(),
     [campaigns, targetsState],
@@ -460,7 +483,7 @@ export function OverviewClient({
           row = { ...cur[idx], [field]: topUp };
           next = cur.map((r, i) => (i === idx ? row : r));
         }
-        startTransition(() => { void actionUpsertTarget(row); });
+        scheduleSave(row);
         return next;
       });
     };
