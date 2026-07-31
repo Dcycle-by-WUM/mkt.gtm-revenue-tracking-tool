@@ -25,6 +25,11 @@
 [functions."sync-crm"]
   timeout = 300
 
+# Sync de llamadas (SDRs Overview) — mismo timeout largo: el backfill histórico
+# (~82k) es pesado; incremental y reanudable, se reparte en 1-2 corridas.
+[functions."sync-calls"]
+  timeout = 300
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 

@@ -95,9 +95,15 @@ async function runStep(
 //   - Backfill: extiende por debajo de la más antigua, con presupuesto de
 //     páginas para caber en el timeout de la función.
 const CALLS_HEAD_MAX_PAGES = 30;
-const CALLS_BACKFILL_MAX_PAGES = 120;
+// Presupuesto de backfill por corrida. Las llamadas se ingieren en su PROPIA
+// scheduled function (`sync-calls`, timeout 300s en netlify.toml), no en el
+// sync principal (timeout corto del botón/cron). A ~0,46s/página, 550 páginas
+// (~55k llamadas) caben holgadamente en 300s dejando terminar limpio; si aún
+// quedan más antiguas, el upsert incremental persiste y la siguiente corrida
+// reanuda por marca de agua. El histórico (~82k) se cubre en 1-2 corridas.
+const CALLS_BACKFILL_MAX_PAGES = 550;
 
-async function syncCalls(): Promise<StepResult> {
+async function syncCalls(backfillMaxPages = CALLS_BACKFILL_MAX_PAGES): Promise<StepResult> {
   try {
     const sb = requireSupabaseAdmin();
     const [newest, oldest] = await Promise.all([
@@ -124,7 +130,7 @@ async function syncCalls(): Promise<StepResult> {
     const res = await streamCalls(sink, {
       ltMs: oldest.data?.occurred_at ? new Date(oldest.data.occurred_at).getTime() : undefined,
       direction: "DESCENDING",
-      maxPages: CALLS_BACKFILL_MAX_PAGES,
+      maxPages: backfillMaxPages,
     });
     if (res.stoppedEarly) {
       console.log(`[sync-crm] calls: upserted=${upserted} (backfill parcial — quedan llamadas más antiguas para el próximo sync)`);
@@ -197,15 +203,16 @@ export async function runCrmSync(trigger: "hubspot" | "hubspot-manual" = "hubspo
     console.warn(`[sync-crm] skipped refresh_kpi_views — un paso previo falló`);
   }
 
-  // Owners + llamadas: siempre (métrica SDRs Overview). Independientes del gate
-  // ABM_ENABLED, que solo controla el timeline completo (meetings/notes/emails).
+  // Owners: siempre (barato — 2-3 páginas). Resuelve id→nombre para SDRs
+  // Overview. Independiente del gate ABM_ENABLED. Las LLAMADAS NO van aquí: son
+  // decenas de miles y harían timeout al botón/cron; se ingieren en su propia
+  // función de background (`runCallsSync` / `sync-calls-background`).
   const owners = await runStep(
     "owners",
     fetchOwners as () => Promise<Record<string, unknown>[]>,
     "owners",
     "id",
   );
-  const calls = await syncCalls();
 
   let engagements: StepResult = { fetched: 0, upserted: 0 };
   if (process.env.ABM_ENABLED === "true") {
@@ -219,11 +226,11 @@ export async function runCrmSync(trigger: "hubspot" | "hubspot-manual" = "hubspo
     console.log("[sync-crm] engagements: omitido (ABM on hold; ABM_ENABLED=true para ingerirlos)");
   }
 
-  const breakdown = { contacts, deals, companies, dealsLinkedContacts, owners, calls, engagements };
+  const breakdown = { contacts, deals, companies, dealsLinkedContacts, owners, engagements };
   const total =
     contacts.upserted + deals.upserted + companies.upserted + dealsLinkedContacts.upserted +
-    owners.upserted + calls.upserted + engagements.upserted;
-  const errors = [contacts, deals, companies, dealsLinkedContacts, owners, calls, engagements]
+    owners.upserted + engagements.upserted;
+  const errors = [contacts, deals, companies, dealsLinkedContacts, owners, engagements]
     .map((s) => s.error)
     .filter(Boolean) as string[];
 
@@ -232,4 +239,29 @@ export async function runCrmSync(trigger: "hubspot" | "hubspot-manual" = "hubspo
   console.log(`[sync-crm] done ok=${ok} refreshed=${refreshed} total=${total} errors=${errors.length}`);
 
   return { ok, refreshed, total, breakdown, errors };
+}
+
+/**
+ * Sync SOLO de llamadas (métrica SDRs Overview). Corre en su propia función de
+ * background (`netlify/functions/sync-calls-background.ts`) porque el volumen
+ * (~82k) no cabe en el timeout del sync principal. Idempotente e incremental:
+ * reanuda por marca de agua desde `activities`.
+ */
+export async function runCallsSync(trigger: "calls" | "calls-manual" = "calls"): Promise<CrmSyncResult> {
+  if (!process.env.HUBSPOT_PRIVATE_APP_TOKEN) {
+    return { skipped: true, reason: "HUBSPOT_PRIVATE_APP_TOKEN no configurada" };
+  }
+  const run = await startedRun(trigger);
+  console.log(`[sync-calls] run started id=${run.id} trigger=${trigger}`);
+  const calls = await syncCalls();
+  const ok = !calls.error;
+  await finishRun(run.id, ok, calls.upserted);
+  console.log(`[sync-calls] done ok=${ok} upserted=${calls.upserted}`);
+  return {
+    ok,
+    refreshed: false,
+    total: calls.upserted,
+    breakdown: { calls },
+    errors: calls.error ? [calls.error] : [],
+  };
 }
