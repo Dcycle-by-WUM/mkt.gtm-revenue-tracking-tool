@@ -210,14 +210,18 @@ Puntúa la "temperatura" de un contacto antes de pedir demo, combinando señales
 | **Pipeline SEO (€)** | Suma `amount` de deals de contactos orgánicos | HubSpot |
 
 ### 10.2 AEO (Answer Engine Optimization) — KPIs y fuentes
+
+> **Motor prioritario: Microsoft Copilot.** La mayoría de clientes Dcycle lo usan, y **Copilot se nutre del índice de Bing** (grounding web vía Bing Search) — a diferencia de ChatGPT/Perplexity, que rastrean con sus propios bots. Por eso `organic_traffic` con `source = 'Bing'` no es solo "otro canal": es la señal técnica más directa de visibilidad en Copilot, y `ai_visibility.platform` desglosa el resto por motor.
+
 | KPI | Definición | Fuente |
 | --- | --- | --- |
-| **AI Visibility** | % de prompts estratégicos donde aparece Dcycle | Plataforma AI-visibility (Profound/Peec/Otterly/Semrush AI) |
-| **AI Share of Voice** | Cuota de aparición vs competidores en esos prompts | Plataforma AI-visibility |
-| **Leads / Pipeline desde IA (€)** | Contactos/deals con `original_source = AI_REFERRALS` | HubSpot |
-| **Bing** | Impresiones/clics/queries/posición (alimenta respuestas IA) | Bing Webmaster Tools (Supermetrics) |
+| **AI Visibility por motor** | % de prompts estratégicos donde aparece Dcycle, **desglosado por `platform`** (Copilot primero; luego ChatGPT/Perplexity/Gemini) | Tabla `ai_visibility` — plataforma de AI-visibility a confirmar (Profound/Peec/Otterly/Semrush AI), **debe soportar Copilot explícitamente** |
+| **AI Share of Voice** | Cuota de aparición vs competidores en esos prompts, por motor | `ai_visibility.competitors` |
+| **Banco de prompts → cita** | Prompt → ¿aparece Dcycle? → `cited_url` (migración 0025) → competidores citados — mismo patrón de *gap* que keyword→página en SEO | `ai_visibility` |
+| **Bing — salud de indexación** | Impresiones/clics/posición (proxy técnico de indexación para Copilot) | `organic_traffic` (`source = 'Bing'`) |
+| **Leads / Pipeline desde IA (€)** | Contactos/deals con `analytics_source = AI_REFERRALS` | HubSpot (`contacts`/`deals`) |
 
-> Requiere **dos fuentes nuevas a confirmar** (§12): (a) herramienta SEO para DA/rankings, (b) plataforma de AI-visibility para prompts/share of voice. El resto sale de GSC/Bing/GA (Supermetrics) + HubSpot, cruzado por la misma puerta de canal (`original_source`) que el paid. Tanto SEO como AEO conectan hasta **pipeline € y deals** (no se quedan en métricas de tráfico).
+> Requiere **dos fuentes nuevas a confirmar** (§12): (a) herramienta SEO para DA/rankings, (b) plataforma de AI-visibility para prompts/share of voice — **con soporte de Copilot como criterio obligatorio de selección**. El modelo de datos (`domain_authority`, `keyword_rankings`, `ai_visibility` con `platform` y `cited_url`) ya está en su sitio para enchufar cualquiera de las dos en cuanto se decidan. El resto sale de GSC/Bing/GA + HubSpot, cruzado por la misma puerta de canal (`analytics_source`) que el paid. Tanto SEO como AEO conectan hasta **pipeline € y deals** (no se quedan en métricas de tráfico).
 
 ---
 

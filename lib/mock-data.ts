@@ -5,6 +5,7 @@
 import type { ChannelMetrics } from "./kpis";
 import type { HeatContact } from "./heat";
 import { regionOf, type CountryGroups } from "./regions";
+import type { DbOrganicTraffic, DbAiVisibility } from "./supabase/types";
 
 export const IS_MOCK = true;
 
@@ -295,17 +296,127 @@ export const mockHeatContacts: HeatContact[] = [
   { email: "ana@verderetail.es", company: "Verde Retail", jobTitle: "Marketing Lead", country: "ES", ownerSdr: "Paula", numConversionEvents: 4, recentConversionDate: "2026-04-02", recentConversionEventName: "Calculadora HdC", firstConversionEventName: "Calculadora HdC", emailLastOpenDate: "2026-04-01", emailOpen: 2, emailClick: 0, emailReplied: 0, pageViews: 3, linkedinEngagement: null, lifecycleStage: "lead", leadStatus: "NEW", emailOptout: false, numContactedNotes: 0 },
 ];
 
-export const mockSeoKpis = [
-  { kpi: "Tráfico orgánico non-branded", value: "18.420 sesiones", source: "GSC + GA4" },
-  { kpi: "Domain Authority (DA)", value: "47 (+2)", source: "Moz/Ahrefs" },
-  { kpi: "Keywords estratégicas en Top 3", value: "34", source: "GSC / rank tracker" },
-  { kpi: "Leads orgánicos (MQL)", value: "61", source: "HubSpot" },
-  { kpi: "Pipeline SEO €", value: "72.000 €", source: "HubSpot" },
+// ── SEO orgánico + AEO (PRD §11) ────────────────────────────────
+// Mock usado SOLO como fallback cuando Supabase aún no tiene filas en
+// `organic_traffic`/`ai_visibility`/`domain_authority` (fuentes "on hold" en
+// DECISIONES.md #6/#7). Motor AEO prioritario: Microsoft Copilot — la
+// mayoría de clientes Dcycle lo usan, y Copilot se nutre del índice de Bing.
+export const mockDomainAuthority = { da: 47, provider: "Moz" };
+
+const seoPageBase: {
+  page: string; country: string;
+  position: [number, number, number]; clicks: [number, number, number]; impressions: [number, number, number];
+}[] = [
+  { page: "/producto", country: "ES", position: [3.8, 3.1, 2.4], clicks: [420, 510, 610], impressions: [9800, 10400, 11200] },
+  { page: "/producto/csrd", country: "UK", position: [4.5, 3.9, 3.2], clicks: [210, 260, 300], impressions: [6100, 6600, 7000] },
+  { page: "/pricing", country: "ES", position: [6.2, 5.4, 4.6], clicks: [150, 180, 210], impressions: [4200, 4500, 4900] },
+  { page: "/blog/que-es-huella-de-carbono", country: "ES", position: [3.9, 4.0, 4.1], clicks: [890, 910, 930], impressions: [21000, 21500, 22000] },
+  { page: "/blog/doble-materialidad-guia", country: "UK", position: [7.1, 6.9, 6.8], clicks: [240, 250, 260], impressions: [7200, 7300, 7500] },
 ];
-export const mockAeoKpis = [
-  { kpi: "AI Visibility", value: "23 %", source: "Plataforma AI-visibility" },
-  { kpi: "AI Share of Voice", value: "12 %", source: "Plataforma AI-visibility" },
-  { kpi: "Leads desde IA (AI_REFERRALS)", value: "14", source: "HubSpot" },
-  { kpi: "Pipeline desde IA €", value: "21.000 €", source: "HubSpot" },
-  { kpi: "Bing — impresiones", value: "44.100", source: "Bing WMT" },
+export const mockOrganicTraffic: DbOrganicTraffic[] = seoPageBase.flatMap((p, pi) =>
+  MONTHS.map((month, i) => ({
+    id: `mock-traffic-${pi}-${i}`,
+    source: "GSC" as const,
+    date: `${month}-15`,
+    query: null,
+    page: p.page,
+    country: p.country,
+    impressions: p.impressions[i],
+    clicks: p.clicks[i],
+    position_avg: p.position[i],
+    is_branded: false,
+    synced_at: `${month}-15T00:00:00Z`,
+  })),
+);
+
+// Bing — salud técnica de indexación (proxy de visibilidad en Copilot, que
+// se nutre del índice de Bing). Mismo `organic_traffic`, `source = 'Bing'`.
+const bingBase: { country: string; impressions: [number, number, number]; clicks: [number, number, number]; position: [number, number, number] }[] = [
+  { country: "ES", impressions: [38000, 41200, 44100], clicks: [1800, 2100, 2450], position: [9.8, 8.9, 8.1] },
+  { country: "UK", impressions: [21000, 22800, 24500], clicks: [980, 1120, 1300], position: [11.2, 10.4, 9.6] },
+];
+export const mockBingTraffic: DbOrganicTraffic[] = bingBase.flatMap((b, bi) =>
+  MONTHS.map((month, i) => ({
+    id: `mock-bing-${bi}-${i}`,
+    source: "Bing" as const,
+    date: `${month}-15`,
+    query: null,
+    page: null,
+    country: b.country,
+    impressions: b.impressions[i],
+    clicks: b.clicks[i],
+    position_avg: b.position[i],
+    is_branded: false,
+    synced_at: `${month}-15T00:00:00Z`,
+  })),
+);
+
+// Banco de prompts estratégicos → cita, por motor. Copilot con más cobertura
+// (motor prioritario) y mejorando mes a mes en la narrativa del mock.
+const aiPromptBase: {
+  prompt: string; platform: string;
+  appeared: [boolean, boolean, boolean];
+  citedUrl: [string | null, string | null, string | null];
+  competitors: [string[], string[], string[]];
+}[] = [
+  { prompt: "mejor software de huella de carbono para empresas", platform: "Copilot",
+    appeared: [false, true, true], citedUrl: [null, "dcycle.io/producto", "dcycle.io/producto"],
+    competitors: [["Persefoni", "Watershed"], ["Persefoni"], ["Persefoni"]] },
+  { prompt: "software reporting CSRD recomendado", platform: "Copilot",
+    appeared: [false, false, true], citedUrl: [null, null, "dcycle.io/producto/csrd"],
+    competitors: [["Sphera", "Watershed"], ["Sphera", "Watershed"], ["Sphera"]] },
+  { prompt: "herramientas para calcular alcance 3 (scope 3)", platform: "Copilot",
+    appeared: [true, true, true], citedUrl: ["dcycle.io/blog/alcance-3-que-es", "dcycle.io/blog/alcance-3-que-es", "dcycle.io/producto"],
+    competitors: [["Watershed"], [], []] },
+  { prompt: "software doble materialidad CSRD", platform: "Copilot",
+    appeared: [false, false, false], citedUrl: [null, null, null],
+    competitors: [["Sphera", "Persefoni"], ["Sphera", "Persefoni"], ["Sphera"]] },
+  { prompt: "best carbon accounting software for enterprise", platform: "ChatGPT",
+    appeared: [false, true, true], citedUrl: [null, "dcycle.io/producto", "dcycle.io/producto"],
+    competitors: [["Watershed", "Persefoni"], ["Watershed"], ["Watershed"]] },
+  { prompt: "CSRD reporting software comparison", platform: "ChatGPT",
+    appeared: [false, false, false], citedUrl: [null, null, null],
+    competitors: [["Sphera", "Workiva"], ["Sphera", "Workiva"], ["Workiva"]] },
+  { prompt: "mejor software huella de carbono", platform: "Perplexity",
+    appeared: [true, true, true], citedUrl: ["dcycle.io/producto", "dcycle.io/producto", "dcycle.io/producto"],
+    competitors: [["Persefoni"], ["Persefoni"], []] },
+  { prompt: "carbon footprint software for SMEs", platform: "Gemini",
+    appeared: [false, false, false], citedUrl: [null, null, null],
+    competitors: [["Watershed", "Persefoni"], ["Watershed"], ["Watershed"]] },
+];
+export const mockAiVisibility: DbAiVisibility[] = aiPromptBase.flatMap((p, pi) =>
+  MONTHS.map((month, i) => ({
+    id: `mock-ai-${pi}-${i}`,
+    date: `${month}-15`,
+    prompt: p.prompt,
+    appeared: p.appeared[i],
+    rank_in_answer: p.appeared[i] ? 1 : null,
+    competitors: p.competitors[i].map((name) => ({ name, appeared: true, rank: null })),
+    cited_url: p.citedUrl[i],
+    platform: p.platform,
+    synced_at: `${month}-15T00:00:00Z`,
+  })),
+);
+
+// Rank tracker (Top 3) — separado de `organic_traffic` (que es tráfico GSC/
+// GA4/Bing por query, no ranking de rank tracker dedicado).
+const keywordRankBase: { keyword: string; position: [number, number, number] }[] = [
+  { keyword: "software gestión huella de carbono", position: [4.1, 3.2, 2.4] },
+  { keyword: "software reporting csrd", position: [4.0, 3.6, 3.2] },
+  { keyword: "calculadora de huella de carbono", position: [5.0, 4.6, 4.1] },
+];
+export const mockKeywordRankings: { keyword: string; position: number; date: string }[] = keywordRankBase.flatMap((k) =>
+  MONTHS.map((month, i) => ({ keyword: k.keyword, position: k.position[i], date: `${month}-15` })),
+);
+
+// Leads/pipeline orgánicos + IA (analytics_source = ORGANIC_SEARCH / AI_REFERRALS).
+export const mockOrganicLeads: {
+  contactId: string; source: "ORGANIC_SEARCH" | "AI_REFERRALS"; month: string; isMql: boolean; dealAmount: number;
+}[] = [
+  { contactId: "mock-lead-1", source: "ORGANIC_SEARCH", month: "2026-06", isMql: true, dealAmount: 32000 },
+  { contactId: "mock-lead-2", source: "ORGANIC_SEARCH", month: "2026-06", isMql: true, dealAmount: 0 },
+  { contactId: "mock-lead-3", source: "AI_REFERRALS", month: "2026-06", isMql: false, dealAmount: 0 },
+  { contactId: "mock-lead-4", source: "AI_REFERRALS", month: "2026-05", isMql: true, dealAmount: 48000 },
+  { contactId: "mock-lead-5", source: "ORGANIC_SEARCH", month: "2026-05", isMql: true, dealAmount: 61000 },
+  { contactId: "mock-lead-6", source: "ORGANIC_SEARCH", month: "2026-04", isMql: false, dealAmount: 0 },
 ];
