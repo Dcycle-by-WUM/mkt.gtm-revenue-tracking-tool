@@ -597,11 +597,99 @@ export async function fetchEngagements(): Promise<HsEngagement[]> {
   return all;
 }
 
-// Solo llamadas (kind='call'), con owner y ventana propia. Alimenta la métrica
-// SDRs Overview sin depender del timeline ABM completo (que está on hold).
-export async function fetchCalls(): Promise<HsEngagement[]> {
-  const cfg = ENGAGEMENT_PATHS.find((c) => c.kind === "call")!;
-  return fetchEngagementPath(cfg);
+// Ingesta de llamadas (kind='call') vía Search API — para la métrica SDRs
+// Overview, sin depender del timeline ABM (on hold).
+//
+// Por qué search y no el list endpoint: hay decenas de miles de llamadas
+// (~82k en el histórico). El list endpoint no filtra por fecha en servidor
+// (obligaría a paginarlo entero) y se topa con el techo del paginador. El
+// search filtra `hs_timestamp` en servidor, ordena, y aquí lo emitimos por
+// páginas a un `sink` para poder PERSISTIR de forma incremental: si el job se
+// queda sin tiempo (Netlify), lo ya volcado se queda y el siguiente sync
+// reanuda por la marca de agua. Para superar el tope de 10k resultados del
+// search, re-cortamos la ventana por el timestamp de borde.
+export type CallBatchSink = (rows: HsEngagement[]) => Promise<void>;
+
+const SEARCH_DELAY_MS = 260; // los endpoints /search tienen un límite más estricto (~4 req/s)
+
+export async function streamCalls(
+  onBatch: CallBatchSink,
+  opts: { gteMs?: number; ltMs?: number; direction?: "ASCENDING" | "DESCENDING"; maxPages?: number } = {},
+): Promise<{ fetched: number; stoppedEarly: boolean }> {
+  const token = requireToken();
+  const floorMs = new Date(callsFrom()).getTime();
+  const direction = opts.direction ?? "DESCENDING";
+  const maxPages = opts.maxPages ?? 100000;
+  const seen = new Set<string>();
+  let fetched = 0;
+  let pages = 0;
+
+  let gteMs = Math.max(floorMs, opts.gteMs ?? floorMs);
+  let ltMs = opts.ltMs; // techo opcional (undefined = sin techo)
+
+  for (let window = 0; window < 400; window++) {
+    let after: string | undefined;
+    let boundaryTs: number | null = null; // ts extremo de la ventana, para avanzar
+    for (let i = 0; i < 100; i++) {
+      if (pages >= maxPages) return { fetched, stoppedEarly: true };
+      const filters: { propertyName: string; operator: string; value: string }[] = [
+        { propertyName: "hs_timestamp", operator: "GTE", value: String(gteMs) },
+      ];
+      if (ltMs !== undefined) filters.push({ propertyName: "hs_timestamp", operator: "LT", value: String(ltMs) });
+      const body = {
+        filterGroups: [{ filters }],
+        sorts: [{ propertyName: "hs_timestamp", direction }],
+        properties: ["hs_timestamp", "hubspot_owner_id"],
+        limit: 100,
+        ...(after ? { after } : {}),
+      };
+      const page = await hsRetry<HsPage<HsRecord>>(
+        () => fetch(`${HUBSPOT_BASE}/crm/v3/objects/calls/search`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        "search calls",
+      );
+      pages++;
+      const batch: HsEngagement[] = [];
+      for (const r of page.results) {
+        const occurred = r.properties.hs_timestamp;
+        if (!occurred) continue;
+        const ts = new Date(occurred).getTime();
+        boundaryTs = boundaryTs === null
+          ? ts
+          : direction === "DESCENDING" ? Math.min(boundaryTs, ts) : Math.max(boundaryTs, ts);
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        batch.push({
+          hubspot_engagement_id: r.id,
+          kind: "call",
+          occurred_at: occurred,
+          owner_id: r.properties.hubspot_owner_id ?? null,
+          hubspot_contact_id: null,
+          hubspot_company_id: null,
+          body: null,
+        });
+      }
+      if (batch.length) {
+        await onBatch(batch);
+        fetched += batch.length;
+      }
+      after = page.paging?.next?.after;
+      if (!after) return { fetched, stoppedEarly: false }; // no hay más en toda la ventana
+      await sleep(SEARCH_DELAY_MS);
+    }
+    // Se agotó el cursor `after` (tope de 10k): re-cortamos por el borde.
+    if (boundaryTs === null) break;
+    if (direction === "DESCENDING") {
+      if (boundaryTs <= gteMs) break; // llegamos al suelo (callsFrom)
+      ltMs = boundaryTs + 1; // sigue por debajo; `seen` deduplica el borde
+    } else {
+      gteMs = boundaryTs; // sigue por encima; `seen` deduplica el borde
+    }
+  }
+  return { fetched, stoppedEarly: false };
 }
 
 // Owners de HubSpot (/crm/v3/owners) para resolver id→nombre y estado. La API

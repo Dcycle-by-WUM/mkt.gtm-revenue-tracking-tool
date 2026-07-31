@@ -9,8 +9,9 @@ import {
   fetchDealLinkedContacts,
   fetchDealLinkedCompanies,
   fetchEngagements,
-  fetchCalls,
   fetchOwners,
+  streamCalls,
+  type HsEngagement,
 } from "@/lib/hubspot";
 import { requireSupabaseAdmin } from "@/lib/supabase/admin";
 
@@ -85,6 +86,59 @@ async function runStep(
   }
 }
 
+// Ingesta de llamadas (métrica SDRs Overview). Vuelca por páginas de forma
+// incremental (persiste aunque el job se quede sin tiempo) y reanuda por marca
+// de agua: `activities` es su propio checkpoint. Por volumen (~82k llamadas) el
+// backfill completo puede tardar varios syncs horarios; cada uno extiende el
+// histórico hacia atrás y recoge las nuevas por delante.
+//   - Cabecera: llamadas nuevas por encima de la más reciente ya ingerida.
+//   - Backfill: extiende por debajo de la más antigua, con presupuesto de
+//     páginas para caber en el timeout de la función.
+const CALLS_HEAD_MAX_PAGES = 30;
+const CALLS_BACKFILL_MAX_PAGES = 120;
+
+async function syncCalls(): Promise<StepResult> {
+  try {
+    const sb = requireSupabaseAdmin();
+    const [newest, oldest] = await Promise.all([
+      sb.from("activities").select("occurred_at").eq("kind", "call").order("occurred_at", { ascending: false }).limit(1).maybeSingle(),
+      sb.from("activities").select("occurred_at").eq("kind", "call").order("occurred_at", { ascending: true }).limit(1).maybeSingle(),
+    ]);
+    if (newest.error) throw new Error(newest.error.message);
+
+    let upserted = 0;
+    const sink = async (rows: HsEngagement[]): Promise<void> => {
+      const stamped = rows.map((r) => ({ ...r, synced_at: new Date().toISOString() }));
+      upserted += await batchUpsert("activities", stamped as unknown as Record<string, unknown>[], "hubspot_engagement_id");
+    };
+
+    // Cabecera: nuevas llamadas por encima de la marca de agua superior.
+    if (newest.data?.occurred_at) {
+      await streamCalls(sink, {
+        gteMs: new Date(newest.data.occurred_at).getTime() + 1,
+        direction: "ASCENDING",
+        maxPages: CALLS_HEAD_MAX_PAGES,
+      });
+    }
+    // Backfill hacia atrás (o completo en el primer sync), con presupuesto.
+    const res = await streamCalls(sink, {
+      ltMs: oldest.data?.occurred_at ? new Date(oldest.data.occurred_at).getTime() : undefined,
+      direction: "DESCENDING",
+      maxPages: CALLS_BACKFILL_MAX_PAGES,
+    });
+    if (res.stoppedEarly) {
+      console.log(`[sync-crm] calls: upserted=${upserted} (backfill parcial — quedan llamadas más antiguas para el próximo sync)`);
+    } else {
+      console.log(`[sync-crm] calls: upserted=${upserted} (backfill al día)`);
+    }
+    return { fetched: upserted, upserted };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[sync-crm] calls: FAILED → ${msg}`);
+    return { fetched: 0, upserted: 0, error: msg };
+  }
+}
+
 /**
  * Corre el sync completo CRM. Devuelve `{ skipped }` si falta el token, o el
  * desglose por etapa. `trigger` solo etiqueta el origen en `sync_runs`
@@ -151,12 +205,7 @@ export async function runCrmSync(trigger: "hubspot" | "hubspot-manual" = "hubspo
     "owners",
     "id",
   );
-  const calls = await runStep(
-    "calls",
-    fetchCalls as () => Promise<Record<string, unknown>[]>,
-    "activities",
-    "hubspot_engagement_id",
-  );
+  const calls = await syncCalls();
 
   let engagements: StepResult = { fetched: 0, upserted: 0 };
   if (process.env.ABM_ENABLED === "true") {
