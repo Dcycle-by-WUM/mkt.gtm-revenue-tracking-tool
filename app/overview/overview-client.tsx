@@ -34,6 +34,10 @@ import { GroupedBars, Donut } from "@/components/ui/charts";
 // país-cubo (ya es 1:1 con la región hoy).
 const REST_SCOPE_COUNTRY = "Rest of Intl + DACH";
 
+// Antes de este mes no había objetivos fiables cargados — la gráfica de
+// tendencia Objetivo vs Real solo tiene sentido a partir de aquí.
+const CHART_START_MONTH = "2026-06";
+
 type ScopeRow = {
   channel: Channel;
   targetSpend: number;
@@ -500,14 +504,18 @@ export function OverviewClient({
     });
   }, [campaigns, month, spainRows, restRows]);
 
-  // Serie mensual (todos los meses) para la gráfica de tendencia Objetivo vs Real.
+  // Serie mensual para la gráfica de tendencia Objetivo vs Real — desde
+  // CHART_START_MONTH: antes de esa fecha no había objetivos fiables (los
+  // meses previos mostraban Objetivo en 0 o discontinuo, sin aportar nada).
   const monthlyPipeline = useMemo(
     () =>
-      allMonths.map((m) => ({
-        month: m,
-        actual: campaigns.filter((c) => c.month === m).reduce((s, c) => s + c.pipeline, 0),
-        target: targetsState.filter((r) => r.month === m).reduce((s, r) => s + r.targetPipeline, 0),
-      })),
+      allMonths
+        .filter((m) => m >= CHART_START_MONTH)
+        .map((m) => ({
+          month: m,
+          actual: campaigns.filter((c) => c.month === m).reduce((s, c) => s + c.pipeline, 0),
+          target: targetsState.filter((r) => r.month === m).reduce((s, r) => s + r.targetPipeline, 0),
+        })),
     [allMonths, campaigns, targetsState],
   );
 
