@@ -209,14 +209,16 @@ function PipelineTotalShare({
   const outboundActual = Math.max(0, totalActual - inboundActual);
 
   const basisLabel = status === "current" ? "real a fecha" : status === "past" ? "real" : "futuro";
+  const inboundW = (inboundPct ?? 0) * 100;
+  const outboundW = inboundPct === null ? 0 : (1 - inboundPct) * 100;
 
   const breakdown = (
     <div className="space-y-1.5">
       <div className="font-medium text-[var(--text)]">Pipeline total de new business</div>
       <div>
-        Todos los deals creados en el mes de los 3 pipelines, vengan de inbound
-        o de outbound/offline. El outbound no tiene objetivo; se muestra solo
-        para el vistazo general.
+        No es un objetivo: es el REPARTO del pipeline total del mes (todos los
+        deals de los 3 pipelines, vengan de inbound o de outbound/offline) entre
+        lo que es inbound atribuido y lo que no. El outbound no tiene objetivo.
       </div>
       <div className="mt-1 border-t border-[var(--border)] pt-1.5">
         {TOTAL_PIPELINES.map((p) => {
@@ -247,30 +249,32 @@ function PipelineTotalShare({
     <div className="mt-5 border-t border-[var(--border)] pt-4">
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-[var(--muted)]">
-          Pipeline total
+          Pipeline total <span className="normal-case tracking-normal text-[var(--faint)]">· reparto</span>
           <Tooltip content={breakdown} />
         </span>
         <span className="text-sm font-semibold tabular-nums">{fmtEur(totalShown)}</span>
       </div>
-      {/* Medidor fino: relleno = inbound, resto del carril = outbound/offline. */}
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--subtle)]">
-        <div
-          className="h-full rounded-full bg-[var(--chart-1)]"
-          style={{ width: `${(inboundPct ?? 0) * 100}%` }}
-        />
+      {/* Barra de COMPOSICIÓN (2 tramos: inbound + outbound), no de pacing —
+          por eso no lleva objetivo ni color de semáforo. */}
+      <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-[var(--subtle)]">
+        <div className="h-full bg-[var(--chart-1)]" style={{ width: `${inboundW}%` }} />
+        <div className="h-full bg-[var(--faint)]" style={{ width: `${outboundW}%` }} />
       </div>
-      <div className="mt-1.5 flex items-center justify-between text-xs text-[var(--muted)]">
-        <span>
-          Inbound{" "}
-          <span className="font-medium tabular-nums text-[var(--text)]">{fmtPct(inboundPct)}</span>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-[var(--muted)]">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--chart-1)]" />
+          Inbound <span className="font-medium tabular-nums text-[var(--text)]">{fmtEur(inboundActual)}</span>
+          <span className="tabular-nums text-[var(--faint)]">· {fmtPct(inboundPct)}</span>
         </span>
-        <span>
-          Outbound/offline{" "}
-          <span className="tabular-nums">{fmtPct(inboundPct === null ? null : 1 - inboundPct)}</span>
-          {" · "}
-          {basisLabel}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--faint)]" />
+          Outbound/offline <span className="tabular-nums">{fmtEur(outboundActual)}</span>
+          <span className="tabular-nums text-[var(--faint)]">· {fmtPct(inboundPct === null ? null : 1 - inboundPct)}</span>
         </span>
       </div>
+      <p className="mt-1 text-[11px] text-[var(--faint)]">
+        Cuánto del pipeline total del mes es inbound ({basisLabel}). El outbound no tiene objetivo.
+      </p>
     </div>
   );
 }
@@ -596,11 +600,6 @@ export function OverviewClient({
   const spainPipe = useMemo(() => spainRows.reduce((s, r) => s + r.actualPipeline, 0), [spainRows]);
   const restPipe = useMemo(() => restRows.reduce((s, r) => s + r.actualPipeline, 0), [restRows]);
   const otherPipe = Math.max(0, totalSel.actualPipeline - spainPipe - restPipe);
-  const regionSplit = [
-    { label: "Spain", value: spainPipe, color: "var(--chart-1)" },
-    { label: "Rest of Intl + DACH", value: restPipe, color: "var(--chart-2)" },
-    { label: "Sin país / Multi", value: otherPipe, color: "var(--chart-6)" },
-  ].filter((d) => d.value > 0);
 
   // Pipeline total de new business del mes (deals crudos de los 3 pipelines),
   // para el bloque "Pipeline total" y el % de inbound sobre el total.
@@ -608,6 +607,26 @@ export function OverviewClient({
     () => pipelineTotals.filter((r) => r.month === month),
     [pipelineTotals, month],
   );
+
+  // Total por región (mapeo pipeline→región en lib/pipelines): Spain = AE;
+  // Rest of Intl + DACH = International + DACH. Alimenta el reparto por
+  // región, donde mostramos el inbound de cada región sobre su total.
+  const totalByRegion = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of TOTAL_PIPELINES) {
+      const amt = pipelineTotalMonthRows.find((r) => r.pipelineId === p.id)?.amount ?? 0;
+      m.set(p.region, (m.get(p.region) ?? 0) + amt);
+    }
+    return m;
+  }, [pipelineTotalMonthRows]);
+
+  // Reparto por región: inbound (por país atribuido) y total (por pipeline de
+  // HubSpot) de cada bucket. Se muestra si hay inbound O total.
+  const regionRows = [
+    { label: "Spain", color: "var(--chart-1)", inbound: spainPipe, total: totalByRegion.get("Spain") ?? 0 },
+    { label: "Rest of Intl + DACH", color: "var(--chart-2)", inbound: restPipe, total: totalByRegion.get("Rest of Intl + DACH") ?? 0 },
+    { label: "Sin país / Multi", color: "var(--chart-6)", inbound: otherPipe, total: 0 },
+  ].filter((r) => r.inbound > 0 || r.total > 0);
 
   // El input muestra el total (targets legacy por país + top-up de este
   // bloque). Al editar, solo se recalcula y persiste el top-up — nunca
@@ -693,10 +712,44 @@ export function OverviewClient({
             month={month}
             status={status}
           />
-          {regionSplit.length > 0 && (
+          {regionRows.length > 0 && (
             <div className="mt-5 flex-1 border-t border-[var(--border)] pt-4">
-              <div className="mb-3 text-xs uppercase tracking-wide text-[var(--muted)]">Reparto por región</div>
-              <Donut data={regionSplit} size={132} formatValue={(v) => fmtEur(v)} />
+              <div className="mb-3 text-xs uppercase tracking-wide text-[var(--muted)]">
+                Reparto por región · inbound sobre total
+              </div>
+              <div className="flex flex-wrap items-center gap-5">
+                <Donut
+                  data={regionRows.map((r) => ({ label: r.label, value: r.inbound, color: r.color }))}
+                  size={132}
+                  formatValue={(v) => fmtEur(v)}
+                  centerLabel="Inbound"
+                  showLegend={false}
+                />
+                <ul className="space-y-2 text-sm">
+                  {regionRows.map((r) => {
+                    const pct = r.total > 0 ? Math.min(1, r.inbound / r.total) : null;
+                    return (
+                      <li key={r.label}>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: r.color }} />
+                          <span className="text-[var(--text-secondary)]">{r.label}</span>
+                        </div>
+                        <div className="pl-[18px] text-xs text-[var(--muted)]">
+                          <span className="font-medium tabular-nums text-[var(--text)]">{fmtEur(r.inbound)}</span>{" "}
+                          inbound
+                          {r.total > 0 && (
+                            <>
+                              {" · de "}
+                              <span className="tabular-nums">{fmtEur(r.total)}</span> total
+                              <span className="text-[var(--faint)]"> ({fmtPct(pct)})</span>
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
           )}
         </div>

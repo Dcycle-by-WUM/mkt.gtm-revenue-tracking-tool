@@ -20,6 +20,10 @@
 // inbound. Los IDs salen de la propiedad `pipeline` (enum) de deals en el
 // portal de HubSpot.
 
+// Buckets de región de Overview (los mismos rótulos que usa la dona de
+// "Reparto por región" y los ScopeTable): Spain vs Rest of Intl + DACH.
+export type PipelineRegion = "Spain" | "Rest of Intl + DACH";
+
 export type TotalPipeline = {
   /** ID del pipeline en HubSpot (valor de `deals.pipeline`). */
   id: string;
@@ -27,15 +31,18 @@ export type TotalPipeline = {
   label: string;
   /** ¿Este pipeline está dentro del scope inbound (pipeline_country_map)? */
   inScopeInbound: boolean;
+  /** Bucket de región de Overview al que suma su pipeline total. */
+  region: PipelineRegion;
 };
 
 // Los tres pipelines de new business. AE e International coinciden con el
 // scope inbound; DACH es 100% outbound hoy (no tiene objetivos y por eso la
 // decisión #12 lo dejó fuera de las métricas inbound), pero sí suma al total.
+// Región: AE → Spain; International y DACH → Rest of Intl + DACH.
 export const TOTAL_PIPELINES: TotalPipeline[] = [
-  { id: "7888791", label: "AE Pipeline", inScopeInbound: true },
-  { id: "883841939", label: "DACH Pipeline", inScopeInbound: false },
-  { id: "727373069", label: "International Pipeline", inScopeInbound: true },
+  { id: "7888791", label: "AE Pipeline", inScopeInbound: true, region: "Spain" },
+  { id: "883841939", label: "DACH Pipeline", inScopeInbound: false, region: "Rest of Intl + DACH" },
+  { id: "727373069", label: "International Pipeline", inScopeInbound: true, region: "Rest of Intl + DACH" },
 ];
 
 export const TOTAL_PIPELINE_IDS: string[] = TOTAL_PIPELINES.map((p) => p.id);
