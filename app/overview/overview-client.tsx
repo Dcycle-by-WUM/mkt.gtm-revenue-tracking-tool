@@ -14,6 +14,8 @@ import { monthStatus, daysElapsedAndTotal, projectFullMonth, type MonthStatus } 
 import { actionUpsertTarget } from "@/app/actions";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { GroupedBars, Donut } from "@/components/ui/charts";
+import { TOTAL_PIPELINES } from "@/lib/pipelines";
+import type { PipelineTotalRow } from "@/lib/data/pipeline-totals";
 
 // Overview "Cómo vamos vs Target" — PRD §9 (2), rediseño jul-2026. Antes esta
 // pantalla mostraba el funnel completo (ahora en /metrics); esta versión se
@@ -175,6 +177,104 @@ function SummaryStat({
       </div>
       <div className="mt-1 text-2xl font-semibold tabular-nums">{actual === null ? "—" : fmtEur(actual)}</div>
       <div className="text-xs text-[var(--muted)]">{mode === "spend" ? "Budget" : "Objetivo"} {fmtEur(target)}</div>
+    </div>
+  );
+}
+
+// Pipeline TOTAL de new business (inbound + outbound/offline) por los tres
+// pipelines AE/DACH/International, y qué % de ese total es inbound. El
+// outbound NO tiene objetivo propio (por eso no lleva pacing ni Δ): es solo
+// para el vistazo general. inbound ⊆ total por construcción (deal_attribution
+// es un subconjunto de los deals crudos), así que el % nunca pasa de 100%.
+function PipelineTotalShare({
+  monthRows,
+  inboundActual,
+  month,
+  status,
+}: {
+  /** Filas de `deal` crudo del mes seleccionado, una por pipeline. */
+  monthRows: PipelineTotalRow[];
+  /** Pipeline inbound real (a fecha) del mes — mismo dato que la stat Pipeline. */
+  inboundActual: number;
+  month: string;
+  status: MonthStatus;
+}) {
+  const totalActual = monthRows.reduce((s, r) => s + r.amount, 0);
+  // Proyectamos el total con la misma convención que el resto de la pantalla
+  // (mes en curso → a fin de mes; cerrado → real; futuro → sin dato).
+  const totalShown = projected(totalActual, month, status);
+  // El % es invariante a la proyección (mismo factor arriba y abajo), así que
+  // lo calculamos sobre el real a fecha. Clamp defensivo a [0, 1].
+  const inboundPct = totalActual > 0 ? Math.min(1, inboundActual / totalActual) : null;
+  const outboundActual = Math.max(0, totalActual - inboundActual);
+
+  const basisLabel = status === "current" ? "real a fecha" : status === "past" ? "real" : "futuro";
+  const inboundW = (inboundPct ?? 0) * 100;
+  const outboundW = inboundPct === null ? 0 : (1 - inboundPct) * 100;
+
+  const breakdown = (
+    <div className="space-y-1.5">
+      <div className="font-medium text-[var(--text)]">Pipeline total de new business</div>
+      <div>
+        No es un objetivo: es el REPARTO del pipeline total del mes (todos los
+        deals de los 3 pipelines, vengan de inbound o de outbound/offline) entre
+        lo que es inbound atribuido y lo que no. El outbound no tiene objetivo.
+      </div>
+      <div className="mt-1 border-t border-[var(--border)] pt-1.5">
+        {TOTAL_PIPELINES.map((p) => {
+          const amount = monthRows.find((r) => r.pipelineId === p.id)?.amount ?? 0;
+          return (
+            <div key={p.id} className="flex justify-between gap-4 tabular-nums">
+              <span>
+                {p.label}
+                {!p.inScopeInbound && <span className="text-[var(--faint)]"> · outbound</span>}
+              </span>
+              <span>{fmtEur(amount)}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex justify-between gap-4 border-t border-[var(--border)] pt-1.5 tabular-nums">
+        <span>Inbound (atribuido)</span>
+        <span>{fmtEur(inboundActual)}</span>
+      </div>
+      <div className="flex justify-between gap-4 tabular-nums">
+        <span>Outbound / offline</span>
+        <span>{fmtEur(outboundActual)}</span>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mt-5 border-t border-[var(--border)] pt-4">
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1 text-xs uppercase tracking-wide text-[var(--muted)]">
+          Pipeline total <span className="normal-case tracking-normal text-[var(--faint)]">· reparto</span>
+          <Tooltip content={breakdown} />
+        </span>
+        <span className="text-sm font-semibold tabular-nums">{fmtEur(totalShown)}</span>
+      </div>
+      {/* Barra de COMPOSICIÓN (2 tramos: inbound + outbound), no de pacing —
+          por eso no lleva objetivo ni color de semáforo. */}
+      <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-[var(--subtle)]">
+        <div className="h-full bg-[var(--chart-1)]" style={{ width: `${inboundW}%` }} />
+        <div className="h-full bg-[var(--faint)]" style={{ width: `${outboundW}%` }} />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-[var(--muted)]">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--chart-1)]" />
+          Inbound <span className="font-medium tabular-nums text-[var(--text)]">{fmtEur(inboundActual)}</span>
+          <span className="tabular-nums text-[var(--faint)]">· {fmtPct(inboundPct)}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-sm bg-[var(--faint)]" />
+          Outbound/offline <span className="tabular-nums">{fmtEur(outboundActual)}</span>
+          <span className="tabular-nums text-[var(--faint)]">· {fmtPct(inboundPct === null ? null : 1 - inboundPct)}</span>
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-[var(--faint)]">
+        Cuánto del pipeline total del mes es inbound ({basisLabel}). El outbound no tiene objetivo.
+      </p>
     </div>
   );
 }
@@ -393,10 +493,12 @@ export function OverviewClient({
   campaigns,
   targets,
   groups,
+  pipelineTotals,
 }: {
   campaigns: CampaignRow[];
   targets: ForecastRow[];
   groups: CountryGroups;
+  pipelineTotals: PipelineTotalRow[];
 }) {
   const [targetsState, setTargetsState] = useState(targets);
   const [, startTransition] = useTransition();
@@ -498,11 +600,33 @@ export function OverviewClient({
   const spainPipe = useMemo(() => spainRows.reduce((s, r) => s + r.actualPipeline, 0), [spainRows]);
   const restPipe = useMemo(() => restRows.reduce((s, r) => s + r.actualPipeline, 0), [restRows]);
   const otherPipe = Math.max(0, totalSel.actualPipeline - spainPipe - restPipe);
-  const regionSplit = [
-    { label: "Spain", value: spainPipe, color: "var(--chart-1)" },
-    { label: "Rest of Intl + DACH", value: restPipe, color: "var(--chart-2)" },
-    { label: "Sin país / Multi", value: otherPipe, color: "var(--chart-6)" },
-  ].filter((d) => d.value > 0);
+
+  // Pipeline total de new business del mes (deals crudos de los 3 pipelines),
+  // para el bloque "Pipeline total" y el % de inbound sobre el total.
+  const pipelineTotalMonthRows = useMemo(
+    () => pipelineTotals.filter((r) => r.month === month),
+    [pipelineTotals, month],
+  );
+
+  // Total por región (mapeo pipeline→región en lib/pipelines): Spain = AE;
+  // Rest of Intl + DACH = International + DACH. Alimenta el reparto por
+  // región, donde mostramos el inbound de cada región sobre su total.
+  const totalByRegion = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of TOTAL_PIPELINES) {
+      const amt = pipelineTotalMonthRows.find((r) => r.pipelineId === p.id)?.amount ?? 0;
+      m.set(p.region, (m.get(p.region) ?? 0) + amt);
+    }
+    return m;
+  }, [pipelineTotalMonthRows]);
+
+  // Reparto por región: inbound (por país atribuido) y total (por pipeline de
+  // HubSpot) de cada bucket. Se muestra si hay inbound O total.
+  const regionRows = [
+    { label: "Spain", color: "var(--chart-1)", inbound: spainPipe, total: totalByRegion.get("Spain") ?? 0 },
+    { label: "Rest of Intl + DACH", color: "var(--chart-2)", inbound: restPipe, total: totalByRegion.get("Rest of Intl + DACH") ?? 0 },
+    { label: "Sin país / Multi", color: "var(--chart-6)", inbound: otherPipe, total: 0 },
+  ].filter((r) => r.inbound > 0 || r.total > 0);
 
   // El input muestra el total (targets legacy por país + top-up de este
   // bloque). Al editar, solo se recalcula y persiste el top-up — nunca
@@ -582,10 +706,50 @@ export function OverviewClient({
               mode="spend"
             />
           </div>
-          {regionSplit.length > 0 && (
+          <PipelineTotalShare
+            monthRows={pipelineTotalMonthRows}
+            inboundActual={totalSel.actualPipeline}
+            month={month}
+            status={status}
+          />
+          {regionRows.length > 0 && (
             <div className="mt-5 flex-1 border-t border-[var(--border)] pt-4">
-              <div className="mb-3 text-xs uppercase tracking-wide text-[var(--muted)]">Reparto por región</div>
-              <Donut data={regionSplit} size={132} formatValue={(v) => fmtEur(v)} />
+              <div className="mb-3 text-xs uppercase tracking-wide text-[var(--muted)]">
+                Reparto por región · inbound sobre total
+              </div>
+              <div className="flex flex-wrap items-center gap-5">
+                <Donut
+                  data={regionRows.map((r) => ({ label: r.label, value: r.inbound, color: r.color }))}
+                  size={132}
+                  formatValue={(v) => fmtEur(v)}
+                  centerLabel="Inbound"
+                  showLegend={false}
+                />
+                <ul className="space-y-2 text-sm">
+                  {regionRows.map((r) => {
+                    const pct = r.total > 0 ? Math.min(1, r.inbound / r.total) : null;
+                    return (
+                      <li key={r.label}>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: r.color }} />
+                          <span className="text-[var(--text-secondary)]">{r.label}</span>
+                        </div>
+                        <div className="pl-[18px] text-xs text-[var(--muted)]">
+                          <span className="font-medium tabular-nums text-[var(--text)]">{fmtEur(r.inbound)}</span>{" "}
+                          inbound
+                          {r.total > 0 && (
+                            <>
+                              {" · de "}
+                              <span className="tabular-nums">{fmtEur(r.total)}</span> total
+                              <span className="text-[var(--faint)]"> ({fmtPct(pct)})</span>
+                            </>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
           )}
         </div>

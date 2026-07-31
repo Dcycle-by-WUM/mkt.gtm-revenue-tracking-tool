@@ -86,14 +86,20 @@ export function GroupedBars({
 }
 
 // Dona de reparto (share). Segmentos + leyenda con valores.
+// `showLegend=false` deja solo la dona (para poner una leyenda propia al lado,
+// p. ej. con un valor secundario). `centerLabel` cambia el rótulo del centro.
 export function Donut({
   data,
   formatValue = (v) => String(v),
   size = 168,
+  showLegend = true,
+  centerLabel = "Total",
 }: {
   data: { label: string; value: number; color: string }[];
   formatValue?: (v: number) => string;
   size?: number;
+  showLegend?: boolean;
+  centerLabel?: string;
 }) {
   const total = data.reduce((s, d) => s + d.value, 0);
   const r = size / 2;
@@ -134,21 +140,23 @@ export function Donut({
           {formatValue(total)}
         </text>
         <text x={r} y={r + 14} textAnchor="middle" fontSize={10} fill="var(--muted)">
-          Total
+          {centerLabel}
         </text>
       </svg>
-      <ul className="space-y-1.5 text-sm">
-        {data.map((d) => (
-          <li key={d.label} className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: d.color }} />
-            <span className="text-[var(--text-secondary)]">{d.label}</span>
-            <span className="tabular-nums text-[var(--muted)]">
-              {formatValue(d.value)}
-              {total > 0 && <span className="text-[var(--faint)]"> · {Math.round((d.value / total) * 100)}%</span>}
-            </span>
-          </li>
-        ))}
-      </ul>
+      {showLegend && (
+        <ul className="space-y-1.5 text-sm">
+          {data.map((d) => (
+            <li key={d.label} className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: d.color }} />
+              <span className="text-[var(--text-secondary)]">{d.label}</span>
+              <span className="tabular-nums text-[var(--muted)]">
+                {formatValue(d.value)}
+                {total > 0 && <span className="text-[var(--faint)]"> · {Math.round((d.value / total) * 100)}%</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
