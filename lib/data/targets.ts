@@ -28,7 +28,7 @@ export async function listTargets(): Promise<ForecastRow[]> {
 export async function upsertTarget(t: ForecastRow): Promise<void> {
   const sb = getSupabaseAdmin();
   if (!sb) return;
-  await sb.from("targets").upsert(
+  const { error } = await sb.from("targets").upsert(
     {
       channel: t.channel,
       month: t.month,
@@ -40,4 +40,5 @@ export async function upsertTarget(t: ForecastRow): Promise<void> {
     },
     { onConflict: "channel,month,country" },
   );
+  if (error) throw new Error(error.message);
 }

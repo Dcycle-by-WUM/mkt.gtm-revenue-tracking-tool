@@ -33,10 +33,15 @@ export async function actionUpsertNote(kind: NoteKind, key: string, body: string
   await upsertNote(kind, key, body);
 }
 
-export async function actionUpsertTarget(t: ForecastRow): Promise<void> {
-  await upsertTarget(t);
+export async function actionUpsertTarget(t: ForecastRow): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await upsertTarget(t);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error desconocido" };
+  }
   revalidatePath("/");
   revalidatePath("/overview");
+  return { ok: true };
 }
 
 export async function actionSetCampaignTags(campaign: string, tags: string[]): Promise<void> {
