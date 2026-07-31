@@ -590,7 +590,7 @@ export function OverviewClient({
       </div>
 
       <p className="mt-4 text-xs text-[var(--muted)]">
-        Total no se edita: Spend/Pipeline Obj son la suma de Spain + Rest of Intl + DACH, y Spend/Pipeline Actual son
+        Total no se edita: Budget/Pipeline Obj son la suma de Spain + Rest of Intl + DACH, y Spend/Pipeline Actual son
         la suma real de todas las campañas del mes. En el mes en curso el Actual es una proyección a fin de mes a
         partir de lo consolidado a fecha (pacing lineal); en meses cerrados es el real consolidado.
       </p>
