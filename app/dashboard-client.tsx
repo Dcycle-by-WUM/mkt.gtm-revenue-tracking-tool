@@ -20,8 +20,18 @@ import {
 } from "lucide-react";
 import { sumMetrics, groupBy, type CampaignRow, type ForecastRow } from "@/lib/mock-data";
 import { fmtEur, fmtNum, fmtPct, roi, cpl, cpmql } from "@/lib/kpis";
-import { leadCohort, type DealRow, type LeadCohort } from "@/lib/data/deals";
+import { leadCohort, dealState, type DealRow, type LeadCohort } from "@/lib/data/deals";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { Donut } from "@/components/ui/charts";
+
+// Color de marca por canal (paleta dataviz), coherente con la pantalla Métricas.
+const CH_COLOR: Record<string, string> = {
+  LinkedIn: "var(--chart-1)",
+  Google: "var(--chart-2)",
+  Organic: "var(--chart-4)",
+  "Email Marketing": "var(--chart-5)",
+  Otros: "var(--chart-6)",
+};
 
 // Orígenes del dato — reutilizados en tooltips (coherentes con Data Health).
 const SRC = {
@@ -129,6 +139,28 @@ export function DashboardClient({
     }));
   }, [deals, scope, activeMonth, year]);
   const maxCohort = Math.max(1, ...dealsByCohort.map((c) => c.amount));
+
+  // Cross-section: Spend por canal (de Métricas), para la dona.
+  const spendByChannel = useMemo(
+    () =>
+      byChannel
+        .filter((c) => c.m.spend > 0)
+        .map((c) => ({ label: c.name, value: c.m.spend, color: CH_COLOR[c.name] ?? "var(--chart-3)" })),
+    [byChannel],
+  );
+
+  // Cross-section: reparto de deals por estado (de Deals & Atribución).
+  const dealsByState = useMemo(() => {
+    const inScopeDeals = deals.filter((d) => (scope === "month" ? d.month === activeMonth : d.month.startsWith(year)));
+    const defs: { key: "abierto" | "ganado" | "cerrado"; label: string; color: string }[] = [
+      { key: "abierto", label: "Abiertos", color: "var(--chart-1)" },
+      { key: "ganado", label: "Ganados", color: "var(--chart-4)" },
+      { key: "cerrado", label: "Perdidos", color: "var(--chart-6)" },
+    ];
+    return defs
+      .map((d) => ({ label: d.label, color: d.color, value: inScopeDeals.filter((x) => dealState(x) === d.key).reduce((s, x) => s + x.amount, 0) }))
+      .filter((d) => d.value > 0);
+  }, [deals, scope, activeMonth, year]);
 
   const scopeLabel = scope === "month" ? `mes ${activeMonth}` : `año ${year} (YTD)`;
 
@@ -249,6 +281,26 @@ export function DashboardClient({
           </Link>
         </div>
       ),
+    },
+    spendChannel: {
+      title: "Spend por canal",
+      span: 1,
+      node:
+        spendByChannel.length > 0 ? (
+          <Donut data={spendByChannel} size={140} formatValue={(v) => fmtEur(v)} />
+        ) : (
+          <Empty>Sin gasto en {scopeLabel}.</Empty>
+        ),
+    },
+    dealsState: {
+      title: "Deals por estado",
+      span: 1,
+      node:
+        dealsByState.length > 0 ? (
+          <Donut data={dealsByState} size={140} formatValue={(v) => fmtEur(v)} />
+        ) : (
+          <Empty>Sin deals en {scopeLabel}.</Empty>
+        ),
     },
     quicklinks: {
       title: "Accesos directos",

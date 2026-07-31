@@ -122,8 +122,8 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-[var(--subtle)] text-left text-xs uppercase text-[var(--muted)]">
             <tr>
               <th className="px-4 py-3">Deal</th>

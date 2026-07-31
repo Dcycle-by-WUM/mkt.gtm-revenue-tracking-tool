@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Cómo va el motor GTM de un vistazo: inversión paid, pipeline generado, ROI y embudo — con el detalle a un clic. Arrastra los módulos para reordenarlos."
+        subtitle="Cómo va el motor GTM de un vistazo: inversión paid, pipeline generado, ROI y embudo — con el detalle a un clic. Arrastra los módulos para reordenarlos y añade métricas de otras pestañas."
       />
       <DashboardClient campaigns={campaigns} targets={targets} deals={deals} />
     </div>
