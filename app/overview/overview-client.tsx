@@ -370,6 +370,7 @@ export function OverviewClient({
 }) {
   const [targetsState, setTargetsState] = useState(targets);
   const [, startTransition] = useTransition();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Guardado con debounce: los inputs de Obj disparan onChange en cada
   // tecla; sin esto, cada pulsación lanzaba su propio actionUpsertTarget y,
@@ -389,7 +390,11 @@ export function OverviewClient({
       key,
       setTimeout(() => {
         saveTimers.current.delete(key);
-        startTransition(() => { void actionUpsertTarget(row); });
+        startTransition(() => {
+          void actionUpsertTarget(row).then((res) => {
+            setSaveError(res.ok ? null : `No se pudo guardar ${row.channel} · ${row.month}: ${res.error}`);
+          });
+        });
       }, 500),
     );
   };
@@ -514,6 +519,15 @@ export function OverviewClient({
         </button>
         <StatusBadge month={month} status={status} />
       </div>
+
+      {saveError && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-[var(--error-text)] bg-[var(--error-bg)] px-4 py-2.5 text-sm text-[var(--error-text)]">
+          <span>{saveError}</span>
+          <button onClick={() => setSaveError(null)} aria-label="Cerrar" className="shrink-0 opacity-70 hover:opacity-100">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Resumen al principio: totales del mes + reparto (izq) y tendencia (der). */}
       <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-3">
