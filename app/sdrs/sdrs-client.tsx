@@ -91,6 +91,12 @@ export function SdrsClient({
 
       {/* Matriz llamadas por comercial × mes. */}
       <Panel title="Llamadas por comercial y mes">
+        {sdr.reps.length === 0 && (
+          <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--subtle)] px-3 py-2 text-xs text-[var(--muted)]">
+            Aún no hay llamadas con owner ingeridas. Se poblarán en el próximo sync de HubSpot
+            (tras aplicar la migración 0026). El pipe por mes de arriba ya es real.
+          </p>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase text-[var(--muted)]">

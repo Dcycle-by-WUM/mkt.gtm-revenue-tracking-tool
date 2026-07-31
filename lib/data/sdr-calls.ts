@@ -100,16 +100,36 @@ function assemble(reps: SdrCallsRow[], dialer: SdrCallsRow): SdrCallsData {
   };
 }
 
+// Estructura vacía pero válida — para cuando hay Supabase pero aún no están la
+// columna `activities.owner_id` / la tabla `owners` (migración 0026 sin aplicar)
+// o falla la lectura. Evita que /sdrs reviente: el bloque de pipe sí funciona.
+const EMPTY: SdrCallsData = {
+  months: [],
+  reps: [],
+  dialer: finalizeRow({ ownerId: null, name: "Dialer / integración (sin owner)", status: "Active", byMonth: {} }),
+  callsByMonth: {},
+  totalOwnerAssigned: 0,
+  totalDialer: 0,
+};
+
 export async function listSdrCalls(): Promise<SdrCallsData> {
   const sb = getSupabase();
   if (!sb) return mockSdrCalls;
 
-  const [calls, owners] = await Promise.all([
-    fetchAll<DbCall>(() =>
-      sb.from("activities").select("owner_id, occurred_at").eq("kind", "call").not("occurred_at", "is", null),
-    ),
-    fetchAll<DbOwner>(() => sb.from("owners").select("id, first_name, last_name, archived")),
-  ]);
+  let calls: DbCall[];
+  let owners: DbOwner[];
+  try {
+    [calls, owners] = await Promise.all([
+      fetchAll<DbCall>(() =>
+        sb.from("activities").select("owner_id, occurred_at").eq("kind", "call").not("occurred_at", "is", null),
+      ),
+      fetchAll<DbOwner>(() => sb.from("owners").select("id, first_name, last_name, archived")),
+    ]);
+  } catch (e) {
+    // Típicamente: migración 0026 aún no aplicada (columna/tabla inexistente).
+    console.warn(`[sdr-calls] lectura falló, devuelvo vacío: ${e instanceof Error ? e.message : e}`);
+    return EMPTY;
+  }
 
   const ownerById = new Map(owners.map((o) => [o.id, o]));
   const ownerName = (o: DbOwner | undefined, id: string): string => {
