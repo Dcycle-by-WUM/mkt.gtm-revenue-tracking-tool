@@ -37,6 +37,18 @@ const REST_SCOPE_COUNTRY = "Rest of Intl + DACH";
 // tendencia Objetivo vs Real solo tiene sentido a partir de aquí.
 const CHART_START_MONTH = "2026-06";
 
+// Cuántos meses por delante del actual se pueden planificar aunque todavía
+// no tengan ninguna campaña ni target cargado — sin esto, el selector de
+// mes (← / → / desplegable) solo enseña meses que YA tienen datos, y no hay
+// forma de llegar a un mes futuro para dejarle el objetivo puesto.
+const FUTURE_MONTHS_AHEAD = 12;
+
+function addMonths(yyyyMM: string, n: number): string {
+  const [y, m] = yyyyMM.split("-").map(Number);
+  const total = (y * 12 + (m - 1)) + n;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+}
+
 type ScopeRow = {
   channel: Channel;
   targetSpend: number;
@@ -417,15 +429,16 @@ export function OverviewClient({
     );
   };
 
-  const allMonths = useMemo(
-    () => [...new Set([...campaigns.map((c) => c.month), ...targetsState.map((t) => t.month)])].sort(),
-    [campaigns, targetsState],
-  );
-
   const todayMonth = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }, []);
+
+  const allMonths = useMemo(() => {
+    const fromData = [...campaigns.map((c) => c.month), ...targetsState.map((t) => t.month)];
+    const planeable = Array.from({ length: FUTURE_MONTHS_AHEAD + 1 }, (_, i) => addMonths(todayMonth, i));
+    return [...new Set([...fromData, ...planeable])].sort();
+  }, [campaigns, targetsState, todayMonth]);
 
   const [month, setMonth] = useState<string>(() => {
     if (allMonths.includes(todayMonth)) return todayMonth;
