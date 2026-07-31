@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { AlertTriangle } from "lucide-react";
 import {
   CHANNELS,
   NO_COUNTRY,
@@ -107,14 +108,30 @@ function ThRight({ label, help }: { label: string; help: string }) {
   );
 }
 
-function DeltaBadge({ pct }: { pct: number | null }) {
+// Un Actual muy por encima del Obj (≥ STALE_RATIO) casi siempre significa
+// "el objetivo se quedó desactualizado", no "resultado buenísimo" — sin este
+// aviso, un objetivo con un cero de menos (8.000 en vez de 80.000) se ve
+// igual de verde que uno correcto al 100%, y pasa desapercibido.
+const STALE_RATIO = 2;
+const isStaleTarget = (target: number, actual: number | null): boolean =>
+  target > 0 && actual !== null && actual / target >= STALE_RATIO;
+
+function DeltaBadge({ pct, mode }: { pct: number | null; mode: "pipeline" | "spend" }) {
   if (pct === null) return <span className="text-xs text-[var(--muted)]">—</span>;
   const cls =
-    pct >= 0.9
-      ? "bg-[var(--good-bg)] text-[var(--good-text)]"
-      : pct >= 0.7
+    mode === "spend"
+      ? pct > 1.1
+        ? "bg-[var(--error-bg)] text-[var(--error-text)]"
+        : pct > 1
+          ? "bg-[var(--warn-bg)] text-[var(--warn-text)]"
+          : "bg-[var(--good-bg)] text-[var(--good-text)]"
+      : pct >= STALE_RATIO
         ? "bg-[var(--warn-bg)] text-[var(--warn-text)]"
-        : "bg-[var(--error-bg)] text-[var(--error-text)]";
+        : pct >= 0.9
+          ? "bg-[var(--good-bg)] text-[var(--good-text)]"
+          : pct >= 0.7
+            ? "bg-[var(--warn-bg)] text-[var(--warn-text)]"
+            : "bg-[var(--error-bg)] text-[var(--error-text)]";
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{fmtPct(pct)}</span>;
 }
 
@@ -202,6 +219,36 @@ function PacingBar({
 const objCell =
   "w-24 rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-right text-sm tabular-nums";
 
+// Input de objetivo con aviso visual cuando el Actual va MUY por delante
+// (isStaleTarget) — sin esto, un objetivo desactualizado (con un cero de
+// menos) se ve igual que uno correcto; el borde ámbar + icono lo hacen
+// saltar a la vista en la propia celda, no solo en el % del Δ.
+function ObjInput({
+  value,
+  stale,
+  onChange,
+}: {
+  value: number;
+  stale: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        type="number"
+        className={`${objCell} ${stale ? "border-[var(--warn-solid)] ring-1 ring-[var(--warn-solid)]" : ""}`}
+        value={value}
+        onChange={(e) => onChange(+e.target.value)}
+      />
+      {stale && (
+        <Tooltip content="El real ya dobla (o más) este objetivo — probablemente esté desactualizado. Revísalo.">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--warn-solid)]" />
+        </Tooltip>
+      )}
+    </span>
+  );
+}
+
 function ScopeTable({
   title,
   rows,
@@ -252,11 +299,10 @@ function ScopeTable({
                   <td className="px-3 py-2">{r.channel}</td>
                   <td className="px-3 py-2 text-right">
                     {onEditObj ? (
-                      <input
-                        type="number"
-                        className={objCell}
+                      <ObjInput
                         value={r.targetSpend}
-                        onChange={(e) => onEditObj(r.channel, "targetSpend", +e.target.value)}
+                        stale={isStaleTarget(r.targetSpend, spendActual)}
+                        onChange={(v) => onEditObj(r.channel, "targetSpend", v)}
                       />
                     ) : (
                       <span className="tabular-nums">{fmtEur(r.targetSpend)}</span>
@@ -270,15 +316,17 @@ function ScopeTable({
                     {spendActual === null ? "—" : fmtEur(spendActual)}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <DeltaBadge pct={r.targetSpend > 0 && spendActual !== null ? spendActual / r.targetSpend : null} />
+                    <DeltaBadge
+                      pct={r.targetSpend > 0 && spendActual !== null ? spendActual / r.targetSpend : null}
+                      mode="spend"
+                    />
                   </td>
                   <td className="px-3 py-2 text-right">
                     {onEditObj ? (
-                      <input
-                        type="number"
-                        className={objCell}
+                      <ObjInput
                         value={r.targetPipeline}
-                        onChange={(e) => onEditObj(r.channel, "targetPipeline", +e.target.value)}
+                        stale={isStaleTarget(r.targetPipeline, pipeActual)}
+                        onChange={(v) => onEditObj(r.channel, "targetPipeline", v)}
                       />
                     ) : (
                       <span className="tabular-nums">{fmtEur(r.targetPipeline)}</span>
@@ -288,7 +336,10 @@ function ScopeTable({
                     {pipeActual === null ? "—" : fmtEur(pipeActual)}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <DeltaBadge pct={r.targetPipeline > 0 && pipeActual !== null ? pipeActual / r.targetPipeline : null} />
+                    <DeltaBadge
+                      pct={r.targetPipeline > 0 && pipeActual !== null ? pipeActual / r.targetPipeline : null}
+                      mode="pipeline"
+                    />
                   </td>
                 </tr>
               );
@@ -308,6 +359,7 @@ function ScopeTable({
               <td className="px-3 py-2 text-right">
                 <DeltaBadge
                   pct={total.targetSpend > 0 && projTargetSpend !== null ? projTargetSpend / total.targetSpend : null}
+                  mode="spend"
                 />
               </td>
               <td className="px-3 py-2 text-right tabular-nums">{fmtEur(total.targetPipeline)}</td>
@@ -321,6 +373,7 @@ function ScopeTable({
                       ? projTargetPipeline / total.targetPipeline
                       : null
                   }
+                  mode="pipeline"
                 />
               </td>
             </tr>
