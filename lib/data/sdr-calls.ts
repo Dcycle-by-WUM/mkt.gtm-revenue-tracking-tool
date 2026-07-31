@@ -184,3 +184,56 @@ export async function listSdrCalls(): Promise<SdrCallsData> {
   reps.sort((a, b) => b.total - a.total);
   return assemble(reps, dialer);
 }
+
+// Diagnóstico para Data Health: localiza dónde se rompe la resolución de
+// nombres de SDR (owners vacío / llamadas sin ingerir / ids sin match).
+export type SdrDiagnostics = {
+  live: boolean;
+  error?: string;
+  ownersCount: number;
+  callsCount: number;
+  callsWithoutOwner: number; // dialer / integración
+  distinctOwnerIds: number; // owners distintos que aparecen en llamadas
+  resolvedOwnerIds: number; // …de esos, cuántos casan con la tabla owners
+  unresolved: { ownerId: string; calls: number }[]; // top ids sin nombre
+};
+
+export async function getSdrDiagnostics(): Promise<SdrDiagnostics> {
+  const base: SdrDiagnostics = {
+    live: false, ownersCount: 0, callsCount: 0, callsWithoutOwner: 0,
+    distinctOwnerIds: 0, resolvedOwnerIds: 0, unresolved: [],
+  };
+  const sb = getSupabase();
+  if (!sb) return base;
+  try {
+    const [calls, owners] = await Promise.all([
+      fetchAll<DbCall>(() => sb.from("activities").select("owner_id, occurred_at").eq("kind", "call")),
+      fetchAll<{ id: string }>(() => sb.from("owners").select("id")),
+    ]);
+    const ownerSet = new Set(owners.map((o) => o.id));
+    const counts = new Map<string, number>();
+    let withoutOwner = 0;
+    for (const c of calls) {
+      if (!c.owner_id) { withoutOwner++; continue; }
+      counts.set(c.owner_id, (counts.get(c.owner_id) ?? 0) + 1);
+    }
+    let resolved = 0;
+    const unresolved: { ownerId: string; calls: number }[] = [];
+    for (const [id, n] of counts) {
+      if (ownerSet.has(id)) resolved++;
+      else unresolved.push({ ownerId: id, calls: n });
+    }
+    unresolved.sort((a, b) => b.calls - a.calls);
+    return {
+      live: true,
+      ownersCount: owners.length,
+      callsCount: calls.length,
+      callsWithoutOwner: withoutOwner,
+      distinctOwnerIds: counts.size,
+      resolvedOwnerIds: resolved,
+      unresolved: unresolved.slice(0, 10),
+    };
+  } catch (e) {
+    return { ...base, live: true, error: e instanceof Error ? e.message : String(e) };
+  }
+}

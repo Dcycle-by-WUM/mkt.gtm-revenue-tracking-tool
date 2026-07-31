@@ -1,5 +1,6 @@
 import { PageHeader, Panel } from "@/components/Page";
 import { getSourceHealth } from "@/lib/data/source-health";
+import { getSdrDiagnostics } from "@/lib/data/sdr-calls";
 import { listUnmatchedUtms } from "@/lib/matching";
 import { listCampaignOptions } from "@/lib/data/campaigns";
 import { supabaseLive } from "@/lib/supabase/client";
@@ -26,10 +27,11 @@ function fmtDate(iso: string | null): string {
 }
 
 export default async function DataHealthPage() {
-  const [health, unmatched, campaignOptions] = await Promise.all([
+  const [health, unmatched, campaignOptions, sdrDx] = await Promise.all([
     getSourceHealth(),
     listUnmatchedUtms(),
     listCampaignOptions(),
+    getSdrDiagnostics(),
   ]);
   const isLive = supabaseLive();
   const unmatchedList = isLive ? unmatched : mockUnmatchedUtms;
@@ -74,6 +76,53 @@ export default async function DataHealthPage() {
         </div>
       </Panel>
 
+      <div className="mt-6">
+        <Panel title="SDRs Overview — diagnóstico llamadas/owners">
+          {!sdrDx.live ? (
+            <p className="text-sm text-[var(--muted)]">Sin Supabase (preview mock).</p>
+          ) : sdrDx.error ? (
+            <p className="text-sm text-[var(--error-text)]">Error leyendo tablas: {sdrDx.error}</p>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <DxStat label="Owners en tabla" value={sdrDx.ownersCount} bad={sdrDx.ownersCount === 0} />
+                <DxStat label="Llamadas ingeridas" value={sdrDx.callsCount} bad={sdrDx.callsCount === 0} />
+                <DxStat label="Sin owner (dialer)" value={sdrDx.callsWithoutOwner} />
+                <DxStat
+                  label="Owners con nombre / total"
+                  value={`${sdrDx.resolvedOwnerIds} / ${sdrDx.distinctOwnerIds}`}
+                  bad={sdrDx.distinctOwnerIds > 0 && sdrDx.resolvedOwnerIds === 0}
+                />
+              </div>
+              <p className="mt-3 text-xs text-[var(--muted)]">
+                {sdrDx.ownersCount === 0
+                  ? "La tabla owners está vacía → los nombres no se pueden resolver. Corre el sync principal (botón \"Actualizar HubSpot\" o cron :00). Si sigue en 0, el token de HubSpot no tiene el scope crm.objects.owners.read."
+                  : sdrDx.callsCount === 0
+                    ? "Aún no hay llamadas ingeridas — las trae el job sync-calls (:30)."
+                    : sdrDx.distinctOwnerIds > 0 && sdrDx.resolvedOwnerIds === 0
+                      ? "Hay owners y llamadas, pero ningún owner_id de las llamadas casa con la tabla owners → desajuste de ids (revisar más abajo)."
+                      : "Resolución de nombres OK."}
+              </p>
+              {sdrDx.unresolved.length > 0 && (
+                <div className="mt-3">
+                  <div className="mb-1 text-xs uppercase tracking-wide text-[var(--muted)]">
+                    Owner ids sin nombre (top por nº de llamadas)
+                  </div>
+                  <ul className="space-y-1 text-xs">
+                    {sdrDx.unresolved.map((u) => (
+                      <li key={u.ownerId} className="flex justify-between border-b border-[var(--border)] py-1 last:border-0">
+                        <span className="font-mono">{u.ownerId}</span>
+                        <span className="tabular-nums text-[var(--muted)]">{u.calls} llamadas</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </Panel>
+      </div>
+
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Panel title={`UTMs sin match (${unmatchedList.length})`}>
           {isLive ? (
@@ -112,6 +161,17 @@ export default async function DataHealthPage() {
             Excepciones via overrides.
           </p>
         </Panel>
+      </div>
+    </div>
+  );
+}
+
+function DxStat({ label, value, bad }: { label: string; value: string | number; bad?: boolean }) {
+  return (
+    <div className="card p-3">
+      <div className="text-xs font-medium uppercase tracking-wide text-[var(--muted)]">{label}</div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${bad ? "text-[var(--error-text)]" : "text-[var(--text)]"}`}>
+        {value}
       </div>
     </div>
   );
