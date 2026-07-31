@@ -214,7 +214,7 @@ function ScopeTable({
   rows: ScopeRow[];
   month: string;
   status: MonthStatus;
-  /** Si se pasa, Spend Obj / Pipeline Obj se editan aquí mismo. Si no, son solo lectura (Total). */
+  /** Si se pasa, Budget / Pipeline Obj se editan aquí mismo. Si no, son solo lectura (Total). */
   onEditObj?: (channel: Channel, field: "targetSpend" | "targetPipeline", value: number) => void;
   /** Total además muestra pacing de Spend (sobrecoste en rojo), no solo de Pipeline. */
   showSpendBar?: boolean;
@@ -235,7 +235,7 @@ function ScopeTable({
           <thead className="bg-[var(--subtle)] text-left text-[11px] uppercase text-[var(--muted)]">
             <tr>
               <th className="px-3 py-2">Canal</th>
-              <th className="px-3 py-2 text-right">Spend Obj</th>
+              <th className="px-3 py-2 text-right">Budget</th>
               <ThRight label="Spend Actual" help="Inversión real de paid media (LinkedIn+Google) vía Supermetrics. En el mes en curso, proyectada a fin de mes." />
               <th className="px-3 py-2 text-right">Δ</th>
               <th className="px-3 py-2 text-right">Pipeline Obj</th>
@@ -329,7 +329,7 @@ function ScopeTable({
       </div>
       {onEditObj && (
         <p className="border-t border-[var(--border)] px-4 py-2 text-[11px] text-[var(--muted)]">
-          Spend Obj / Pipeline Obj se editan aquí y se guardan al vuelo.
+          Budget / Pipeline Obj se editan aquí y se guardan al vuelo.
         </p>
       )}
     </div>
