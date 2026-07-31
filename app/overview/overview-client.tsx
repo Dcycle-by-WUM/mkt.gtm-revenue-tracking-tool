@@ -305,7 +305,10 @@ function ScopeTable({
                     {onEditObj ? (
                       <ObjInput
                         value={r.targetSpend}
-                        stale={isStaleTarget(r.targetSpend, spendActual)}
+                        // Sin aviso de "desactualizado" aquí: gastar más del
+                        // budget es sobrecoste normal, no señal de que el
+                        // objetivo esté mal (a diferencia de Pipeline Obj).
+                        stale={false}
                         onChange={(v) => onEditObj(r.channel, "targetSpend", v)}
                       />
                     ) : (
