@@ -32,7 +32,13 @@ export type SdrCallsData = {
 };
 
 type DbCall = { owner_id: string | null; occurred_at: string | null };
-type DbOwner = { id: string; first_name: string | null; last_name: string | null; archived: boolean | null };
+type DbOwner = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  archived: boolean | null;
+};
 
 // Comerciales excluidos SIEMPRE del análisis (decisión de negocio): no cuentan
 // en totales, matriz ni ratios. Comparación sin acentos y en minúsculas.
@@ -131,7 +137,7 @@ export async function listSdrCalls(): Promise<SdrCallsData> {
       fetchAll<DbCall>(() =>
         sb.from("activities").select("owner_id, occurred_at").eq("kind", "call").not("occurred_at", "is", null),
       ),
-      fetchAll<DbOwner>(() => sb.from("owners").select("id, first_name, last_name, archived")),
+      fetchAll<DbOwner>(() => sb.from("owners").select("id, first_name, last_name, email, archived")),
     ]);
   } catch (e) {
     // Típicamente: migración 0026 aún no aplicada (columna/tabla inexistente).
@@ -142,7 +148,9 @@ export async function listSdrCalls(): Promise<SdrCallsData> {
   const ownerById = new Map(owners.map((o) => [o.id, o]));
   const ownerName = (o: DbOwner | undefined, id: string): string => {
     const n = [o?.first_name, o?.last_name].filter(Boolean).join(" ").trim();
-    return n || id; // sin nombre resuelto, mostramos el id
+    if (n) return n;
+    if (o?.email) return o.email.split("@")[0]; // sin nombre, mostramos el usuario del email
+    return id; // sin nombre ni email resueltos, mostramos el id crudo (último recurso)
   };
 
   // Agrega por (owner, mes). El bucket sin owner va bajo la clave "__dialer__".
