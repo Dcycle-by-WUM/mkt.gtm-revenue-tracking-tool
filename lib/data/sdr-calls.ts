@@ -11,6 +11,7 @@
 
 import { getSupabase } from "@/lib/supabase/client";
 import { fetchAll, fetchAllParallel } from "@/lib/supabase/fetch-all";
+import { OWNER_NAME_FALLBACK } from "@/lib/data/sdr-owner-names";
 
 export type SdrCallsRow = {
   ownerId: string | null; // null = bucket dialer/integración (sin owner)
@@ -156,9 +157,10 @@ export async function listSdrCalls(): Promise<SdrCallsData> {
   const ownerById = new Map(owners.map((o) => [o.id, o]));
   const ownerName = (o: DbOwner | undefined, id: string): string => {
     const n = [o?.first_name, o?.last_name].filter(Boolean).join(" ").trim();
-    if (n) return n;
-    if (o?.email) return o.email.split("@")[0]; // sin nombre, mostramos el usuario del email
-    return id; // sin nombre ni email resueltos, mostramos el id crudo (último recurso)
+    if (n) return n; // 1) nombre real de la tabla owners (sync de HubSpot)
+    if (OWNER_NAME_FALLBACK[id]) return OWNER_NAME_FALLBACK[id]; // 2) mapa curado (owners vacía por scope; ver sdr-owner-names.ts)
+    if (o?.email) return o.email.split("@")[0]; // 3) sin nombre, el usuario del email
+    return id; // 4) último recurso: id crudo de HubSpot
   };
 
   // Agrega por (owner, mes). El bucket sin owner va bajo la clave "__dialer__".
