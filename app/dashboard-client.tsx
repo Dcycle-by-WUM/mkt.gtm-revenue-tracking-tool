@@ -130,7 +130,7 @@ export function DashboardClient({
 
   // Cross-section: pipeline de deals por cohorte del lead (de Deals & Atribución).
   const dealsByCohort = useMemo(() => {
-    const inYear = deals.filter((d) => (scope === "month" ? d.month === activeMonth : d.month.startsWith(year)));
+    const inYear = deals.filter((d) => (scope === "month" ? d.month === activeMonth : d.month?.startsWith(year)));
     const labels: Record<LeadCohort, string> = { "2026": "Leads 2026", "histórico": "Leads históricos", "sin contacto": "Sin contacto" };
     return (Object.keys(labels) as LeadCohort[]).map((c) => ({
       name: labels[c],
@@ -151,7 +151,7 @@ export function DashboardClient({
 
   // Cross-section: reparto de deals por estado (de Deals & Atribución).
   const dealsByState = useMemo(() => {
-    const inScopeDeals = deals.filter((d) => (scope === "month" ? d.month === activeMonth : d.month.startsWith(year)));
+    const inScopeDeals = deals.filter((d) => (scope === "month" ? d.month === activeMonth : d.month?.startsWith(year)));
     const defs: { key: "abierto" | "ganado" | "cerrado"; label: string; color: string }[] = [
       { key: "abierto", label: "Abiertos", color: "var(--chart-1)" },
       { key: "ganado", label: "Ganados", color: "var(--chart-4)" },
