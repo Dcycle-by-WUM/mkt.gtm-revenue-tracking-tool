@@ -1,7 +1,7 @@
 // Motor de normalización + matching UTM ↔ campaña — PRD §8.1.
 //
-//  1) Normalización: lower → trim → quitar acentos → colapsar TODO lo no
-//     alfanumérico a un único "_" sobre el nombre COMPLETO.
+//  1) Normalización: lower → trim → quitar acentos → colapsar espacios →
+//     normalizar separadores → clave canónica (segmento antes del primer "|"/"[").
 //  2) Matching, en cascada:
 //     a) exacto sobre clave canónica
 //     b) alias (campaign_aliases)
@@ -20,24 +20,29 @@ const ACCENT_MAP: Record<string, string> = {
   Á: "a", É: "e", Í: "i", Ó: "o", Ú: "u", Ü: "u", Ñ: "n",
 };
 
-// La clave canónica es el nombre COMPLETO normalizado. Antes se truncaba en
-// el primer '[' o '|' (la "clave canónica" era solo el prefijo), lo que
-// fusionaba en una misma clave campañas que solo se diferencian en el sufijo
-// —p.ej. "…ESG [TOFU] … | Mensaje DACH" y "…ESG [TOFU] … | Mensaje GER"
-// colapsaban a "int_dach_mensaje_calendario esg"— y kpi_by_campaign_month les
-// atribuía EXACTAMENTE los mismos leads a las dos (doble conteo). Conservar el
-// nombre entero, colapsando cualquier puntuación (espacios, [ ] | – - & _ …) a
-// un único '_', las separa (…_mensaje_dach vs …_mensaje_ger) y es simétrico
-// entre los dos lados del join (campaign_name_norm ↔ utm_campaign_norm).
 export function normalizeUtm(raw: string): string {
   if (!raw) return "";
   let s = raw.trim().toLowerCase();
   // 1) quitar acentos
-  s = s.replace(/[áéíóúüñ]/g, (c) => ACCENT_MAP[c] ?? c);
-  // 2) colapsar todo lo no alfanumérico a un único guion bajo
-  s = s.replace(/[^a-z0-9]+/g, "_");
-  // 3) sin guiones bajos sobrantes en los extremos
-  s = s.replace(/^_+|_+$/g, "");
+  s = s.replace(/[áéíóúüñÁÉÍÓÚÜÑ]/g, (c) => ACCENT_MAP[c] ?? c);
+  // 2) separadores → guion bajo
+  s = s.replace(/[|\-]+/g, "_");
+  // 3) colapsar espacios
+  s = s.replace(/\s+/g, " ").trim();
+  // 4) clave canónica: lo que va ANTES del primer '|' o '[' (en el raw)
+  const stop = Math.min(
+    ...[raw.indexOf("|"), raw.indexOf("[")].filter((i) => i >= 0),
+  );
+  if (Number.isFinite(stop) && stop > 0) {
+    s = raw
+      .slice(0, stop)
+      .trim()
+      .toLowerCase()
+      .replace(/[áéíóúüñÁÉÍÓÚÜÑ]/g, (c) => ACCENT_MAP[c] ?? c)
+      .replace(/[|\-]+/g, "_")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
   return s;
 }
 
