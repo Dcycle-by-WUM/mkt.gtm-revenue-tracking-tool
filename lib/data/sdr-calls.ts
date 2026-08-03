@@ -10,7 +10,7 @@
 // que van en un bucket aparte y NO cuentan en los totales por persona.
 
 import { getSupabase } from "@/lib/supabase/client";
-import { fetchAll } from "@/lib/supabase/fetch-all";
+import { fetchAll, fetchAllParallel } from "@/lib/supabase/fetch-all";
 
 export type SdrCallsRow = {
   ownerId: string | null; // null = bucket dialer/integración (sin owner)
@@ -134,8 +134,16 @@ export async function listSdrCalls(): Promise<SdrCallsData> {
   let owners: DbOwner[];
   try {
     [calls, owners] = await Promise.all([
-      fetchAll<DbCall>(() =>
-        sb.from("activities").select("owner_id, occurred_at").eq("kind", "call").not("occurred_at", "is", null),
+      // ~80k filas: paginación EN PARALELO (ver fetchAllParallel) para no
+      // encadenar decenas de round-trips y agotar el tiempo de la función SSR.
+      // `order("id")` = PK estable → páginas sin solapes.
+      fetchAllParallel<DbCall>(() =>
+        sb
+          .from("activities")
+          .select("owner_id, occurred_at", { count: "exact" })
+          .eq("kind", "call")
+          .not("occurred_at", "is", null)
+          .order("id", { ascending: true }),
       ),
       fetchAll<DbOwner>(() => sb.from("owners").select("id, first_name, last_name, email, archived")),
     ]);
@@ -215,7 +223,15 @@ export async function getSdrDiagnostics(): Promise<SdrDiagnostics> {
   if (!sb) return base;
   try {
     const [calls, owners] = await Promise.all([
-      fetchAll<DbCall>(() => sb.from("activities").select("owner_id, occurred_at").eq("kind", "call")),
+      // Mismo motivo que en listSdrCalls: paginación en paralelo para no agotar
+      // el tiempo de la función con ~80k filas.
+      fetchAllParallel<DbCall>(() =>
+        sb
+          .from("activities")
+          .select("owner_id, occurred_at", { count: "exact" })
+          .eq("kind", "call")
+          .order("id", { ascending: true }),
+      ),
       fetchAll<{ id: string }>(() => sb.from("owners").select("id")),
     ]);
     const ownerSet = new Set(owners.map((o) => o.id));
