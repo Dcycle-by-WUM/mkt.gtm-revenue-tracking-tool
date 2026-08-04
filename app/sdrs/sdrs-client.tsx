@@ -26,6 +26,16 @@ const REGIONS: { key: string; label: string; ids: string[] | null }[] = [
 
 const repKey = (r: SdrCallsRow) => r.ownerId ?? r.name;
 
+// Suelo del eje de meses: la página solo muestra datos a partir de este mes
+// (decisión de negocio: el pipe de new business arranca en dic-2025; antes solo
+// hay llamadas sueltas sin pipe con el que compararlas).
+const START_MONTH = "2025-12";
+
+// Total de llamadas de un rep restringido a los meses visibles (ventana), para
+// que los totales cuadren con las columnas que se ven.
+const windowedTotal = (r: SdrCallsRow, months: string[]): number =>
+  months.reduce((s, m) => s + (r.byMonth[m] ?? 0), 0);
+
 // Objetivo de pipe para la métrica "Llamadas necesarias para X €".
 const TARGET_EUR = 15000;
 
@@ -76,7 +86,7 @@ export function SdrsClient({
   const allPipeMonths = useMemo(() => pipelineTotals.map((r) => r.month), [pipelineTotals]);
   const months = useMemo(() => {
     const s = new Set<string>([...sdr.months, ...allPipeMonths]);
-    return [...s].sort();
+    return [...s].filter((m) => m >= START_MONTH).sort();
   }, [sdr.months, allPipeMonths]);
 
   // Llamadas/mes de los SDRs seleccionados.
@@ -241,7 +251,7 @@ export function SdrsClient({
                 <span>{r.name}</span>
                 <PipelineTag pipeline={r.pipeline} />
                 {r.status === "Left" && <span className="text-[10px] text-[var(--faint)]">·baja</span>}
-                <span className="tabular-nums text-[var(--faint)]">{fmtNum(r.total)}</span>
+                <span className="tabular-nums text-[var(--faint)]">{fmtNum(windowedTotal(r, months))}</span>
               </button>
             );
           })}
@@ -355,7 +365,7 @@ export function SdrsClient({
                       <td key={m} className="px-2 py-2 text-right tabular-nums">{fmtNum(callsByMonth[m] ?? 0)}</td>
                     ))}
                     <td className="px-3 py-2 text-right tabular-nums">
-                      {fmtNum(selectedReps.reduce((s, r) => s + r.total, 0))}
+                      {fmtNum(selectedReps.reduce((s, r) => s + windowedTotal(r, months), 0))}
                     </td>
                     <td className="px-2 py-2" />
                     <td className="px-2 py-2" />
@@ -399,7 +409,9 @@ export function SdrsClient({
                     {fmtNum(v)}
                   </td>
                 ))}
-                <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtNum(sdr.totalDialer)}</td>
+                <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                  {fmtNum(dialerValues.reduce((s, v) => s + v, 0))}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -512,6 +524,12 @@ function PipelineTargetTable({
 }
 
 function RepRow({ r, months }: { r: SdrCallsRow; months: string[] }) {
+  // Total / meses activos / media recalculados sobre los meses visibles, para
+  // que cuadren con las celdas de la fila.
+  const cells = months.map((m) => r.byMonth[m] ?? 0);
+  const total = cells.reduce((s, v) => s + v, 0);
+  const activeMonths = cells.filter((v) => v > 0).length;
+  const avgPerActiveMonth = activeMonths ? Math.round(total / activeMonths) : 0;
   return (
     <tr className="border-t border-[var(--border)] hover:bg-[var(--subtle)]">
       <td className="sticky left-0 bg-[var(--panel)] px-3 py-2 font-medium">{r.name}</td>
@@ -535,9 +553,9 @@ function RepRow({ r, months }: { r: SdrCallsRow; months: string[] }) {
           </td>
         );
       })}
-      <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtNum(r.total)}</td>
-      <td className="px-2 py-2 text-right tabular-nums text-[var(--muted)]">{r.activeMonths}</td>
-      <td className="px-2 py-2 text-right tabular-nums text-[var(--muted)]">{fmtNum(r.avgPerActiveMonth)}</td>
+      <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtNum(total)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-[var(--muted)]">{activeMonths}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-[var(--muted)]">{fmtNum(avgPerActiveMonth)}</td>
     </tr>
   );
 }
