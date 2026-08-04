@@ -17,7 +17,7 @@ export default async function SdrsPage() {
     <div>
       <PageHeader
         title="SDRs Overview"
-        subtitle="Llamadas por comercial y mes frente al pipeline de new business abierto cada mes. Dos series en paralelo (el pipe no se atribuye por comercial); el bloque del dialer sin owner va aparte."
+        subtitle="Llamadas por comercial y mes frente al pipeline de new business abierto cada mes. Cada SDR está etiquetado por pipeline (AE Pipeline / DACH Pipeline) para filtrar la actividad por equipo. Dos series en paralelo (el pipe no se atribuye por comercial); el bloque del dialer sin owner va aparte."
       />
       <SdrsClient sdr={sdr} pipelineTotals={pipelineTotals} />
     </div>

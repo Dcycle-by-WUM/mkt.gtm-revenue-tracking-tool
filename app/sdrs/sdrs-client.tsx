@@ -6,6 +6,7 @@ import { GroupedBars } from "@/components/ui/charts";
 import { fmtEur, fmtNum } from "@/lib/kpis";
 import type { SdrCallsData, SdrCallsRow } from "@/lib/data/sdr-calls";
 import type { PipelineTotalRow } from "@/lib/data/pipeline-totals";
+import { SDR_PIPELINE_LABEL, type SdrPipeline } from "@/lib/data/sdr-pipelines";
 
 // Rótulo de mes compacto: "2026-07" -> "jul 26".
 const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -23,6 +24,23 @@ const REGIONS: { key: string; label: string; ids: string[] | null }[] = [
 ];
 
 const repKey = (r: SdrCallsRow) => r.ownerId ?? r.name;
+
+// Distintivo de pipeline del SDR — colores propios por pipeline para leerlos de
+// un vistazo tanto en las chips del selector como en la matriz.
+const PIPELINE_STYLE: Record<SdrPipeline, string> = {
+  AE: "bg-[var(--accent-soft)] text-[var(--accent)]",
+  DACH: "bg-[var(--good-bg)] text-[var(--good-text)]",
+};
+function PipelineTag({ pipeline }: { pipeline: SdrPipeline | null }) {
+  if (!pipeline) {
+    return <span className="text-[10px] uppercase tracking-wide text-[var(--faint)]">Sin asignar</span>;
+  }
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${PIPELINE_STYLE[pipeline]}`}>
+      {SDR_PIPELINE_LABEL[pipeline]}
+    </span>
+  );
+}
 
 export function SdrsClient({
   sdr,
@@ -88,6 +106,29 @@ export function SdrsClient({
       return next;
     });
 
+  // Nº de SDRs por pipeline — para rotular los botones de selección rápida.
+  const pipelineCounts = useMemo(() => {
+    const c = { AE: 0, DACH: 0, none: 0 } as { AE: number; DACH: number; none: number };
+    for (const r of sdr.reps) {
+      if (r.pipeline === "AE") c.AE++;
+      else if (r.pipeline === "DACH") c.DACH++;
+      else c.none++;
+    }
+    return c;
+  }, [sdr.reps]);
+
+  // Selección rápida por pipeline: deja seleccionados solo los SDRs de ese
+  // pipeline (o los que no tienen ninguno asignado). Reaprovecha el mecanismo
+  // de selección existente: calls, matriz y eficiencia se recalculan solos.
+  const selectByPipeline = (p: SdrPipeline | "none") =>
+    setSelected(
+      new Set(
+        sdr.reps
+          .filter((r) => (p === "none" ? r.pipeline === null : r.pipeline === p))
+          .map(repKey),
+      ),
+    );
+
   return (
     <div className="space-y-6">
       {sdr.reps.length === 0 && (
@@ -99,7 +140,7 @@ export function SdrsClient({
 
       {/* Selector de SDRs — recalcula llamadas, matriz y eficiencia. */}
       <Panel title={`SDRs en el análisis (${selectedReps.length}/${sdr.reps.length})`}>
-        <div className="mb-3 flex gap-2 text-xs">
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
           <button
             onClick={() => setSelected(new Set(sdr.reps.map(repKey)))}
             className="rounded border border-[var(--border)] px-2 py-1 hover:bg-[var(--subtle)]"
@@ -112,6 +153,30 @@ export function SdrsClient({
           >
             Ninguno
           </button>
+          <span className="mx-1 text-[var(--faint)]">·</span>
+          <span className="text-[var(--muted)]">Por pipeline:</span>
+          <button
+            onClick={() => selectByPipeline("AE")}
+            disabled={pipelineCounts.AE === 0}
+            className="rounded border border-[var(--border)] px-2 py-1 hover:bg-[var(--subtle)] disabled:opacity-40"
+          >
+            {SDR_PIPELINE_LABEL.AE} <span className="tabular-nums text-[var(--faint)]">{pipelineCounts.AE}</span>
+          </button>
+          <button
+            onClick={() => selectByPipeline("DACH")}
+            disabled={pipelineCounts.DACH === 0}
+            className="rounded border border-[var(--border)] px-2 py-1 hover:bg-[var(--subtle)] disabled:opacity-40"
+          >
+            {SDR_PIPELINE_LABEL.DACH} <span className="tabular-nums text-[var(--faint)]">{pipelineCounts.DACH}</span>
+          </button>
+          {pipelineCounts.none > 0 && (
+            <button
+              onClick={() => selectByPipeline("none")}
+              className="rounded border border-[var(--border)] px-2 py-1 hover:bg-[var(--subtle)]"
+            >
+              Sin asignar <span className="tabular-nums text-[var(--faint)]">{pipelineCounts.none}</span>
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {sdr.reps.map((r) => {
@@ -121,15 +186,16 @@ export function SdrsClient({
                 key={repKey(r)}
                 onClick={() => toggle(repKey(r))}
                 aria-pressed={on}
-                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
                   on
                     ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
                     : "border-[var(--border)] text-[var(--muted)] hover:bg-[var(--subtle)]"
                 }`}
               >
-                {r.name}
-                {r.status === "Left" && <span className="ml-1 text-[10px] text-[var(--faint)]">·baja</span>}
-                <span className="ml-1.5 tabular-nums text-[var(--faint)]">{fmtNum(r.total)}</span>
+                <span>{r.name}</span>
+                <PipelineTag pipeline={r.pipeline} />
+                {r.status === "Left" && <span className="text-[10px] text-[var(--faint)]">·baja</span>}
+                <span className="tabular-nums text-[var(--faint)]">{fmtNum(r.total)}</span>
               </button>
             );
           })}
@@ -196,6 +262,7 @@ export function SdrsClient({
                 <thead className="text-left text-xs uppercase text-[var(--muted)]">
                   <tr>
                     <th className="sticky left-0 bg-[var(--panel)] px-3 py-2">Comercial</th>
+                    <th className="px-2 py-2">Pipeline</th>
                     <th className="px-2 py-2">Estado</th>
                     {months.map((m) => (
                       <th key={m} className="px-2 py-2 text-right tabular-nums">{monthLabel(m)}</th>
@@ -213,6 +280,7 @@ export function SdrsClient({
                     <td className="sticky left-0 bg-[var(--subtle)] px-3 py-2">
                       Total ({selectedReps.length} sel.)
                     </td>
+                    <td className="px-2 py-2" />
                     <td className="px-2 py-2" />
                     {months.map((m) => (
                       <td key={m} className="px-2 py-2 text-right tabular-nums">{fmtNum(callsByMonth[m] ?? 0)}</td>
@@ -276,6 +344,7 @@ function RepRow({ r, months }: { r: SdrCallsRow; months: string[] }) {
   return (
     <tr className="border-t border-[var(--border)] hover:bg-[var(--subtle)]">
       <td className="sticky left-0 bg-[var(--panel)] px-3 py-2 font-medium">{r.name}</td>
+      <td className="px-2 py-2"><PipelineTag pipeline={r.pipeline} /></td>
       <td className="px-2 py-2">
         <span
           className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${

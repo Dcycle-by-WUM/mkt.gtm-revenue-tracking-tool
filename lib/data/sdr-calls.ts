@@ -12,11 +12,13 @@
 import { getSupabase } from "@/lib/supabase/client";
 import { fetchAll, fetchAllParallel } from "@/lib/supabase/fetch-all";
 import { OWNER_NAME_FALLBACK } from "@/lib/data/sdr-owner-names";
+import { sdrPipeline, type SdrPipeline } from "@/lib/data/sdr-pipelines";
 
 export type SdrCallsRow = {
   ownerId: string | null; // null = bucket dialer/integración (sin owner)
   name: string;
   status: "Active" | "Left";
+  pipeline: SdrPipeline | null; // pipeline de new business que atiende (o null)
   byMonth: Record<string, number>; // "YYYY-MM" -> nº de llamadas
   total: number;
   activeMonths: number; // meses con al menos una llamada
@@ -93,6 +95,7 @@ function finalizeRow(base: {
   const activeMonths = values.filter((v) => v > 0).length;
   return {
     ...base,
+    pipeline: sdrPipeline(base.name),
     total,
     activeMonths,
     avgPerActiveMonth: activeMonths ? Math.round(total / activeMonths) : 0,
