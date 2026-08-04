@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { Panel } from "@/components/Page";
 import { GroupedBars } from "@/components/ui/charts";
-import { fmtEur, fmtNum } from "@/lib/kpis";
+import { fmtEur, fmtNum, fmtPct } from "@/lib/kpis";
 import type { SdrCallsData, SdrCallsRow } from "@/lib/data/sdr-calls";
 import type { PipelineTotalRow } from "@/lib/data/pipeline-totals";
+import type { InboundPipelineTotal } from "@/lib/data/deals";
 import { SDR_PIPELINE_LABEL, type SdrPipeline } from "@/lib/data/sdr-pipelines";
 
 // Rótulo de mes compacto: "2026-07" -> "jul 26".
@@ -55,9 +56,11 @@ function PipelineTag({ pipeline }: { pipeline: SdrPipeline | null }) {
 export function SdrsClient({
   sdr,
   pipelineTotals,
+  inboundTotals,
 }: {
   sdr: SdrCallsData;
   pipelineTotals: PipelineTotalRow[];
+  inboundTotals: InboundPipelineTotal[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(sdr.reps.map(repKey)));
   const [region, setRegion] = useState<string>("all");
@@ -126,6 +129,17 @@ export function SdrsClient({
     }
     return acc;
   }, [pipelineTotals]);
+
+  // Pipe INBOUND por (pipelineId, mes) — subconjunto del total, para el % de
+  // inbound de cada pipeline.
+  const pipelineInboundByMonth = useMemo(() => {
+    const acc: Record<string, Record<string, number>> = {};
+    for (const meta of PIPELINE_META) acc[meta.pipelineId] = {};
+    for (const r of inboundTotals) {
+      if (acc[r.pipelineId]) acc[r.pipelineId][r.month] = (acc[r.pipelineId][r.month] ?? 0) + r.amount;
+    }
+    return acc;
+  }, [inboundTotals]);
 
   const shownReps = showAll ? selectedReps : selectedReps.slice(0, 15);
   const regionLabel = REGIONS.find((r) => r.key === region)?.label ?? "Todos";
@@ -286,7 +300,8 @@ export function SdrsClient({
         <p className="mb-4 text-xs text-[var(--muted)]">
           Por cada pipeline y mes: <strong>Pipe por llamada</strong> = pipe abierto ÷ llamadas de
           los SDRs de ese pipeline; <strong>Llamadas para {fmtEur(TARGET_EUR)}</strong> ={" "}
-          {fmtEur(TARGET_EUR)} ÷ pipe por llamada. Usa <em>todos</em> los SDRs del pipeline (no
+          {fmtEur(TARGET_EUR)} ÷ pipe por llamada. <strong>% inbound</strong> = pipe inbound
+          atribuido ÷ pipe total del pipeline. Usa <em>todos</em> los SDRs del pipeline (no
           depende del selector de arriba). Meses sin pipe o sin llamadas salen como "–".
         </p>
         <div className="space-y-6">
@@ -297,6 +312,7 @@ export function SdrsClient({
               months={months}
               calls={pipelineCallsByMonth[meta.key]}
               pipe={pipelinePipeByMonth[meta.pipelineId] ?? {}}
+              inbound={pipelineInboundByMonth[meta.pipelineId] ?? {}}
             />
           ))}
         </div>
@@ -401,14 +417,21 @@ function PipelineTargetTable({
   months,
   calls,
   pipe,
+  inbound,
 }: {
   label: string;
   months: string[];
   calls: Record<string, number>;
   pipe: Record<string, number>;
+  inbound: Record<string, number>;
 }) {
   const totalCalls = months.reduce((s, m) => s + (calls[m] ?? 0), 0);
   const totalPipe = months.reduce((s, m) => s + (pipe[m] ?? 0), 0);
+  const totalInbound = months.reduce((s, m) => s + (inbound[m] ?? 0), 0);
+  // % de inbound sobre el pipe total — null si no hay pipe; tope 100% (inbound
+  // ⊆ total por construcción, pero por si acaso).
+  const inboundPct = (inb: number, p: number): number | null =>
+    p > 0 ? Math.min(1, inb / p) : null;
   // Pipe por llamada (€/llamada) — null si no hay llamadas.
   const perCall = (c: number, p: number): number | null => (c > 0 ? p / c : null);
   // Llamadas necesarias para el objetivo — null si no hay pipe ni llamadas.
@@ -455,6 +478,17 @@ function PipelineTargetTable({
               ))}
               <td className="px-3 py-2 text-right font-semibold tabular-nums text-[var(--muted)]">
                 {numOrDash(perCall(totalCalls, totalPipe), fmtEur)}
+              </td>
+            </tr>
+            <tr className="border-t border-[var(--border)]">
+              <td className="sticky left-0 bg-[var(--panel)] px-3 py-2 font-medium">% inbound</td>
+              {months.map((m) => (
+                <td key={m} className="px-2 py-2 text-right tabular-nums text-[var(--muted)]">
+                  {numOrDash(inboundPct(inbound[m] ?? 0, pipe[m] ?? 0), fmtPct)}
+                </td>
+              ))}
+              <td className="px-3 py-2 text-right font-semibold tabular-nums text-[var(--muted)]">
+                {numOrDash(inboundPct(totalInbound, totalPipe), fmtPct)}
               </td>
             </tr>
             <tr className="border-t-2 border-[var(--border)] bg-[var(--subtle)] font-semibold">

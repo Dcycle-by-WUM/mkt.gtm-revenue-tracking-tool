@@ -16,6 +16,7 @@ export type DealRow = {
   dealstage: string | null;
   isClosedWon: boolean;
   isClosed: boolean;
+  pipelineId: string | null;
   pipelineLabel: string;
   // Región de negocio por pipeline (AE → Spain, International → Rest of
   // International). Manda sobre regionOf(country) al filtrar por región:
@@ -52,10 +53,10 @@ export function leadCohort(row: Pick<DealRow, "contactCreatedMonth">): LeadCohor
 // Dataset de ejemplo para cuando Supabase no está vivo (mismo criterio que
 // el resto de fachadas: la pantalla enseña algo coherente con el mock).
 const mockDeals: DealRow[] = [
-  { dealId: "m1", dealname: "Acme Logistics - SaaS ESG", month: "2026-06", amount: 24000, dealstage: "proposal", isClosedWon: false, isClosed: false, pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "LinkedIn", attributionVia: "deal", campaign: "esp_mensaje_españa_documento [mofu]", country: "ES", contactCreatedMonth: "2026-04" },
-  { dealId: "m2", dealname: "Verde Retail - HC + CSRD", month: "2026-06", amount: 18000, dealstage: "closedwon", isClosedWon: true, isClosed: true, pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Google", attributionVia: "deal", campaign: "lm_calculadora-hdc-2025-es", country: "ES", contactCreatedMonth: "2026-03" },
-  { dealId: "m3", dealname: "Nordwind GmbH - PPWR", month: "2026-06", amount: 31000, dealstage: "negotiation", isClosedWon: false, isClosed: false, pipelineLabel: "International Pipeline", businessRegion: "Rest of International", channel: "Otros", attributionVia: "deal", campaign: null, country: "DE", contactCreatedMonth: "2025-11" },
-  { dealId: "m4", dealname: "Portola Foods - Upsell reporting", month: "2026-05", amount: 12500, dealstage: "qualification", isClosedWon: false, isClosed: false, pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Otros", attributionVia: "deal", campaign: null, country: "ES", contactCreatedMonth: null },
+  { dealId: "m1", dealname: "Acme Logistics - SaaS ESG", month: "2026-06", amount: 24000, dealstage: "proposal", isClosedWon: false, isClosed: false, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "LinkedIn", attributionVia: "deal", campaign: "esp_mensaje_españa_documento [mofu]", country: "ES", contactCreatedMonth: "2026-04" },
+  { dealId: "m2", dealname: "Verde Retail - HC + CSRD", month: "2026-06", amount: 18000, dealstage: "closedwon", isClosedWon: true, isClosed: true, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Google", attributionVia: "deal", campaign: "lm_calculadora-hdc-2025-es", country: "ES", contactCreatedMonth: "2026-03" },
+  { dealId: "m3", dealname: "Nordwind GmbH - PPWR", month: "2026-06", amount: 31000, dealstage: "negotiation", isClosedWon: false, isClosed: false, pipelineId: "727373069", pipelineLabel: "International Pipeline", businessRegion: "Rest of International", channel: "Otros", attributionVia: "deal", campaign: null, country: "DE", contactCreatedMonth: "2025-11" },
+  { dealId: "m4", dealname: "Portola Foods - Upsell reporting", month: "2026-05", amount: 12500, dealstage: "qualification", isClosedWon: false, isClosed: false, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Otros", attributionVia: "deal", campaign: null, country: "ES", contactCreatedMonth: null },
 ];
 
 function fromDbRow(r: DbDealAttribution): DealRow {
@@ -67,6 +68,7 @@ function fromDbRow(r: DbDealAttribution): DealRow {
     dealstage: r.dealstage,
     isClosedWon: r.is_closed_won,
     isClosed: r.is_closed,
+    pipelineId: r.pipeline_id,
     pipelineLabel: r.pipeline_label,
     businessRegion: r.business_region,
     channel: r.channel,
@@ -84,4 +86,23 @@ export async function listDealAttribution(): Promise<DealRow[]> {
     () => sb.from("deal_attribution").select("*").order("month", { ascending: false }),
   );
   return rows.map(fromDbRow);
+}
+
+// Pipe INBOUND por (pipeline, mes) — suma de `deal_attribution` (ya scoped a
+// inbound) agrupada por pipeline_id y mes. Sirve para el % de inbound sobre el
+// pipe total (listPipelineTotals): inbound ⊆ total por construcción, así que el
+// cociente nunca pasa de 100%. Reaprovecha listDealAttribution (mock/Supabase).
+export type InboundPipelineTotal = { pipelineId: string; month: string; amount: number };
+
+export async function listInboundPipelineTotals(): Promise<InboundPipelineTotal[]> {
+  const deals = await listDealAttribution();
+  const acc = new Map<string, InboundPipelineTotal>();
+  for (const d of deals) {
+    if (!d.pipelineId) continue; // sin id de pipeline no se puede casar con el total
+    const key = `${d.month}|${d.pipelineId}`;
+    const cur = acc.get(key);
+    if (cur) cur.amount += d.amount;
+    else acc.set(key, { pipelineId: d.pipelineId, month: d.month, amount: d.amount });
+  }
+  return [...acc.values()];
 }
