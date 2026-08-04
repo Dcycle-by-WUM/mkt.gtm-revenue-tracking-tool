@@ -113,4 +113,7 @@ export const OWNER_NAME_FALLBACK: Record<string, string> = {
   "303087279": "Cecilia Bayas",
   "322297311": "Pedro Atienza",
   "333663504": "Elyza Adova",
+  "626687112": "Gelia Pereira",
+  "626687267": "Santiago Rodríguez",
+  "682399521": "Jorge Latorre Escudero",
 };
