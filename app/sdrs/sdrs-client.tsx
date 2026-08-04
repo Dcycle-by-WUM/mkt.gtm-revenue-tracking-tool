@@ -25,6 +25,16 @@ const REGIONS: { key: string; label: string; ids: string[] | null }[] = [
 
 const repKey = (r: SdrCallsRow) => r.ownerId ?? r.name;
 
+// Objetivo de pipe para la métrica "Llamadas necesarias para X €".
+const TARGET_EUR = 15000;
+
+// Pipelines de new business con SDRs asignados y su id de HubSpot (mismos ids
+// que `REGIONS` y `lib/pipelines.ts`). El pipe se filtra por estos ids.
+const PIPELINE_META: { key: SdrPipeline; label: string; pipelineId: string }[] = [
+  { key: "AE", label: SDR_PIPELINE_LABEL.AE, pipelineId: "7888791" },
+  { key: "DACH", label: SDR_PIPELINE_LABEL.DACH, pipelineId: "883841939" },
+];
+
 // Distintivo de pipeline del SDR — colores propios por pipeline para leerlos de
 // un vistazo tanto en las chips del selector como en la matriz.
 const PIPELINE_STYLE: Record<SdrPipeline, string> = {
@@ -94,6 +104,28 @@ export function SdrsClient({
     const pipe = pipeByMonth[m] ?? 0;
     return pipe > 0 ? (callsByMonth[m] ?? 0) / (pipe / 1000) : 0;
   });
+
+  // Llamadas por (pipeline, mes) — TODOS los SDRs etiquetados en ese pipeline,
+  // independiente del selector de arriba (la métrica es "por pipeline", no por
+  // selección). El dialer sin owner no cuenta (no tiene pipeline).
+  const pipelineCallsByMonth = useMemo(() => {
+    const acc: Record<SdrPipeline, Record<string, number>> = { AE: {}, DACH: {} };
+    for (const r of sdr.reps) {
+      if (r.pipeline !== "AE" && r.pipeline !== "DACH") continue;
+      for (const m of months) acc[r.pipeline][m] = (acc[r.pipeline][m] ?? 0) + (r.byMonth[m] ?? 0);
+    }
+    return acc;
+  }, [sdr.reps, months]);
+
+  // Pipe por (pipelineId, mes) — pipe abierto de cada pipeline de new business.
+  const pipelinePipeByMonth = useMemo(() => {
+    const acc: Record<string, Record<string, number>> = {};
+    for (const meta of PIPELINE_META) acc[meta.pipelineId] = {};
+    for (const r of pipelineTotals) {
+      if (acc[r.pipelineId]) acc[r.pipelineId][r.month] = (acc[r.pipelineId][r.month] ?? 0) + r.amount;
+    }
+    return acc;
+  }, [pipelineTotals]);
 
   const shownReps = showAll ? selectedReps : selectedReps.slice(0, 15);
   const regionLabel = REGIONS.find((r) => r.key === region)?.label ?? "Todos";
@@ -249,6 +281,27 @@ export function SdrsClient({
         />
       </Panel>
 
+      {/* Llamadas necesarias para 15.000 € de pipe, por pipeline y mes. */}
+      <Panel title={`Llamadas necesarias para ${fmtEur(TARGET_EUR)} de pipe, por pipeline y mes`}>
+        <p className="mb-4 text-xs text-[var(--muted)]">
+          Por cada pipeline y mes: <strong>Pipe por llamada</strong> = pipe abierto ÷ llamadas de
+          los SDRs de ese pipeline; <strong>Llamadas para {fmtEur(TARGET_EUR)}</strong> ={" "}
+          {fmtEur(TARGET_EUR)} ÷ pipe por llamada. Usa <em>todos</em> los SDRs del pipeline (no
+          depende del selector de arriba). Meses sin pipe o sin llamadas salen como "–".
+        </p>
+        <div className="space-y-6">
+          {PIPELINE_META.map((meta) => (
+            <PipelineTargetTable
+              key={meta.key}
+              label={meta.label}
+              months={months}
+              calls={pipelineCallsByMonth[meta.key]}
+              pipe={pipelinePipeByMonth[meta.pipelineId] ?? {}}
+            />
+          ))}
+        </div>
+      </Panel>
+
       {/* Matriz llamadas por comercial × mes (solo seleccionados). */}
       <Panel title="Llamadas por comercial y mes">
         {selectedReps.length === 0 ? (
@@ -336,6 +389,90 @@ export function SdrsClient({
           </table>
         </div>
       </Panel>
+    </div>
+  );
+}
+
+// Tabla "Llamadas necesarias para 15.000 €" de un pipeline: meses en columnas +
+// columna Total, métricas en filas (Llamadas, Pipe Gen, Pipe/llamada, Llamadas
+// para el objetivo). Layout vertical igual que el ejemplo de negocio.
+function PipelineTargetTable({
+  label,
+  months,
+  calls,
+  pipe,
+}: {
+  label: string;
+  months: string[];
+  calls: Record<string, number>;
+  pipe: Record<string, number>;
+}) {
+  const totalCalls = months.reduce((s, m) => s + (calls[m] ?? 0), 0);
+  const totalPipe = months.reduce((s, m) => s + (pipe[m] ?? 0), 0);
+  // Pipe por llamada (€/llamada) — null si no hay llamadas.
+  const perCall = (c: number, p: number): number | null => (c > 0 ? p / c : null);
+  // Llamadas necesarias para el objetivo — null si no hay pipe ni llamadas.
+  const callsForTarget = (c: number, p: number): number | null =>
+    c > 0 && p > 0 ? (TARGET_EUR * c) / p : null;
+  const numOrDash = (v: number | null, fmt: (n: number) => string) =>
+    v === null ? "–" : fmt(v);
+
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold">{label}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase text-[var(--muted)]">
+            <tr>
+              <th className="sticky left-0 bg-[var(--panel)] px-3 py-2">Métrica</th>
+              {months.map((m) => (
+                <th key={m} className="px-2 py-2 text-right tabular-nums">{monthLabel(m)}</th>
+              ))}
+              <th className="px-3 py-2 text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t border-[var(--border)]">
+              <td className="sticky left-0 bg-[var(--panel)] px-3 py-2 font-medium">Llamadas</td>
+              {months.map((m) => (
+                <td key={m} className="px-2 py-2 text-right tabular-nums">{fmtNum(calls[m] ?? 0)}</td>
+              ))}
+              <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtNum(totalCalls)}</td>
+            </tr>
+            <tr className="border-t border-[var(--border)]">
+              <td className="sticky left-0 bg-[var(--panel)] px-3 py-2 font-medium">Pipe gen.</td>
+              {months.map((m) => (
+                <td key={m} className="px-2 py-2 text-right tabular-nums">{fmtEur(pipe[m] ?? 0)}</td>
+              ))}
+              <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmtEur(totalPipe)}</td>
+            </tr>
+            <tr className="border-t border-[var(--border)]">
+              <td className="sticky left-0 bg-[var(--panel)] px-3 py-2 font-medium">Pipe / llamada</td>
+              {months.map((m) => (
+                <td key={m} className="px-2 py-2 text-right tabular-nums text-[var(--muted)]">
+                  {numOrDash(perCall(calls[m] ?? 0, pipe[m] ?? 0), fmtEur)}
+                </td>
+              ))}
+              <td className="px-3 py-2 text-right font-semibold tabular-nums text-[var(--muted)]">
+                {numOrDash(perCall(totalCalls, totalPipe), fmtEur)}
+              </td>
+            </tr>
+            <tr className="border-t-2 border-[var(--border)] bg-[var(--subtle)] font-semibold">
+              <td className="sticky left-0 bg-[var(--subtle)] px-3 py-2">
+                Llamadas para {fmtEur(TARGET_EUR)}
+              </td>
+              {months.map((m) => (
+                <td key={m} className="px-2 py-2 text-right tabular-nums text-[var(--accent)]">
+                  {numOrDash(callsForTarget(calls[m] ?? 0, pipe[m] ?? 0), (v) => fmtNum(Math.round(v)))}
+                </td>
+              ))}
+              <td className="px-3 py-2 text-right tabular-nums text-[var(--accent)]">
+                {numOrDash(callsForTarget(totalCalls, totalPipe), (v) => fmtNum(Math.round(v)))}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
