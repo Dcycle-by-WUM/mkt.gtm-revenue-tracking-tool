@@ -7,6 +7,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { DbDealAttribution } from "@/lib/supabase/types";
 import { normalizeCountryLabel } from "@/lib/regions";
+import { parseWebinarList, type Webinar } from "@/lib/webinars";
 
 export type DealRow = {
   dealId: string;
@@ -29,7 +30,21 @@ export type DealRow = {
   campaign: string | null;
   country: string;
   contactCreatedMonth: string | null;
+  // Compelling event: webinars a los que estaba inscrito el contacto que
+  // originó el deal, filtrados a los que preceden al deal (el deal se abrió en
+  // o después del mes del webinar). Independiente de campaña/UTM. Ver
+  // `webinarsForDeal` y lib/webinars.ts.
+  webinars: Webinar[];
 };
+
+// Corte compelling event: de los webinars inscritos del contacto, quedarse con
+// los que el deal pudo "capitalizar" — el deal se abrió en o después del mes
+// del webinar (`dealMonth >= ym`). Los webinars sin mes codificado en el código
+// se conservan (no escondemos una inscripción real por no poder datarla); los
+// posteriores al deal se descartan (no pudieron influir en su apertura).
+export function webinarsForDeal(raw: string | null, dealMonth: string): Webinar[] {
+  return parseWebinarList(raw).filter((w) => w.ym === null || dealMonth >= w.ym);
+}
 
 // Estado del deal para la pantalla: abierto / ganado / perdido.
 export type DealState = "abierto" | "ganado" | "cerrado";
@@ -53,10 +68,10 @@ export function leadCohort(row: Pick<DealRow, "contactCreatedMonth">): LeadCohor
 // Dataset de ejemplo para cuando Supabase no está vivo (mismo criterio que
 // el resto de fachadas: la pantalla enseña algo coherente con el mock).
 const mockDeals: DealRow[] = [
-  { dealId: "m1", dealname: "Acme Logistics - SaaS ESG", month: "2026-06", amount: 24000, dealstage: "proposal", isClosedWon: false, isClosed: false, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "LinkedIn", attributionVia: "deal", campaign: "esp_mensaje_españa_documento [mofu]", country: "ES", contactCreatedMonth: "2026-04" },
-  { dealId: "m2", dealname: "Verde Retail - HC + CSRD", month: "2026-06", amount: 18000, dealstage: "closedwon", isClosedWon: true, isClosed: true, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Google", attributionVia: "deal", campaign: "lm_calculadora-hdc-2025-es", country: "ES", contactCreatedMonth: "2026-03" },
-  { dealId: "m3", dealname: "Nordwind GmbH - PPWR", month: "2026-06", amount: 31000, dealstage: "negotiation", isClosedWon: false, isClosed: false, pipelineId: "727373069", pipelineLabel: "International Pipeline", businessRegion: "Rest of International", channel: "Otros", attributionVia: "deal", campaign: null, country: "DE", contactCreatedMonth: "2025-11" },
-  { dealId: "m4", dealname: "Portola Foods - Upsell reporting", month: "2026-05", amount: 12500, dealstage: "qualification", isClosedWon: false, isClosed: false, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Otros", attributionVia: "deal", campaign: null, country: "ES", contactCreatedMonth: null },
+  { dealId: "m1", dealname: "Acme Logistics - SaaS ESG", month: "2026-06", amount: 24000, dealstage: "proposal", isClosedWon: false, isClosed: false, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "LinkedIn", attributionVia: "deal", campaign: "esp_mensaje_españa_documento [mofu]", country: "ES", contactCreatedMonth: "2026-04", webinars: webinarsForDeal("wb_einf_feb26", "2026-06") },
+  { dealId: "m2", dealname: "Verde Retail - HC + CSRD", month: "2026-06", amount: 18000, dealstage: "closedwon", isClosedWon: true, isClosed: true, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Google", attributionVia: "deal", campaign: "lm_calculadora-hdc-2025-es", country: "ES", contactCreatedMonth: "2026-03", webinars: webinarsForDeal("wb_ia-cdp-ecovadis_may26;wb_datos-csrd_sep26", "2026-06") },
+  { dealId: "m3", dealname: "Nordwind GmbH - PPWR", month: "2026-06", amount: 31000, dealstage: "negotiation", isClosedWon: false, isClosed: false, pipelineId: "727373069", pipelineLabel: "International Pipeline", businessRegion: "Rest of International", channel: "Otros", attributionVia: "deal", campaign: null, country: "DE", contactCreatedMonth: "2025-11", webinars: [] },
+  { dealId: "m4", dealname: "Portola Foods - Upsell reporting", month: "2026-05", amount: 12500, dealstage: "qualification", isClosedWon: false, isClosed: false, pipelineId: "7888791", pipelineLabel: "AE Pipeline", businessRegion: "Spain", channel: "Otros", attributionVia: "deal", campaign: null, country: "ES", contactCreatedMonth: null, webinars: [] },
 ];
 
 function fromDbRow(r: DbDealAttribution): DealRow {
@@ -76,6 +91,7 @@ function fromDbRow(r: DbDealAttribution): DealRow {
     campaign: r.campaign,
     country: normalizeCountryLabel(r.country),
     contactCreatedMonth: r.contact_created_month,
+    webinars: webinarsForDeal(r.webinars_registrado, r.month),
   };
 }
 

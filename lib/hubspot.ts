@@ -34,6 +34,11 @@ const PROPS_CONTACT = [
   "hs_email_last_open_date", "hs_email_open", "hs_email_click",
   "hs_email_replied", "hs_analytics_num_page_views",
   "hs_email_optout", "num_contacted_notes", "createdate",
+  // Compelling event: webinars a los que se inscribió el contacto (haya
+  // asistido o no). Enumeration multi-valor → la API lo devuelve como lista
+  // separada por `;`. El mes del evento va codificado en cada código
+  // (`wb_ppwr-spain_jul26`); ver lib/webinars.ts.
+  "webinars_registrado",
 ] as const;
 
 const PROPS_DEAL = [
@@ -75,6 +80,7 @@ export type HsContact = {
   email_optout: boolean;
   num_contacted_notes: number;
   created_at_hs: string | null;
+  webinars_registrado: string | null;
 };
 
 // MQL = Lead Status ∉ {MK NOT QUALIFIED, vacío} — DECISIONES #1. Los vacíos
@@ -235,6 +241,7 @@ function mapContact(r: HsRecord): HsContact {
     email_optout: p.hs_email_optout === "true",
     num_contacted_notes: Number(p.num_contacted_notes ?? 0),
     created_at_hs: p.createdate,
+    webinars_registrado: p.webinars_registrado ?? null,
   };
 }
 
