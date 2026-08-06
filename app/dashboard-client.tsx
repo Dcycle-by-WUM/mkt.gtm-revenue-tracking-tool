@@ -42,6 +42,27 @@ const SRC = {
 
 const LS_KEY = "gtm-dashboard-modules-v1";
 
+// Vista/scope del dashboard. "h2" es el default de Dcycle (ver más abajo).
+type Scope = "h2" | "month" | "ytd";
+
+// ── Definición de H2 (Dcycle) ──────────────────────────────────────────────
+// El semestre H2 combina DOS ventanas distintas según la métrica:
+//   • Pipeline € e inversión (paid) → lo GENERADO a partir del 1 jun 2026.
+//   • Deals de inbound CERRADOS      → a partir del 1 ago 2026.
+// Por eso hay dos cortes de mes (YYYY-MM) y no una sola fecha de inicio.
+const H2_PIPELINE_START = "2026-06"; // pipeline + inversión "generados"
+const H2_DEALS_START = "2026-08"; //    deals de inbound "cerrados"
+
+// Notas que se añaden a la INFO (tooltip) de cada punto cuando la vista es H2,
+// para que la definición del semestre quede explicada en su propio contexto.
+const H2_NOTE = {
+  spend: "H2 Dcycle: incluye la inversión generada a partir del 1 jun 2026.",
+  pipeline: "H2 Dcycle: incluye el pipeline generado a partir del 1 jun 2026.",
+  roi: "Pipeline € generado por cada € invertido. En H2, sobre lo generado desde el 1 jun 2026.",
+  closedWon: "H2 Dcycle: deals de inbound cerrados a partir del 1 ago 2026.",
+  funnel: "H2 Dcycle: volumen del embudo generado a partir del 1 jun 2026.",
+};
+
 function thisMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -60,7 +81,9 @@ export function DashboardClient({
   targets: ForecastRow[];
   deals?: DealRow[];
 }) {
-  const [scope, setScope] = useState<"month" | "ytd">("month");
+  // Default = H2 (semestre Dcycle). El equipo mira el dashboard en clave de H2,
+  // así que arranca ahí; "Este mes" y "Año (YTD)" siguen a un clic.
+  const [scope, setScope] = useState<Scope>("h2");
 
   // Layout personalizable persistido en localStorage (por navegador).
   const [order, setOrder] = useState<string[]>(DEFAULT_ORDER);
@@ -91,7 +114,18 @@ export function DashboardClient({
   const tm = thisMonth();
   const activeMonth = months.includes(tm) ? tm : (months[months.length - 1] ?? tm);
   const year = activeMonth.slice(0, 4);
-  const inScope = (m: string) => (scope === "month" ? m === activeMonth : m.startsWith(year));
+  // Scope de campañas/objetivos (spend, pipeline, embudo, canales, targets).
+  // En H2 = todo lo generado desde jun 2026 (H2_PIPELINE_START).
+  const inScope = (m: string) =>
+    scope === "month" ? m === activeMonth : scope === "ytd" ? m.startsWith(year) : m >= H2_PIPELINE_START;
+  // Scope de DEALS (cohorte/estado/closed won). En H2 = deals de inbound
+  // cerrados desde ago 2026 (H2_DEALS_START), ventana distinta a la de pipeline.
+  const dealInScope = (m: string | null | undefined) =>
+    scope === "month"
+      ? m === activeMonth
+      : scope === "ytd"
+        ? !!m?.startsWith(year)
+        : !!m && m >= H2_DEALS_START;
 
   const rows = useMemo(() => campaigns.filter((c) => inScope(c.month)), [campaigns, scope, activeMonth]);
   const t = useMemo(() => sumMetrics(rows), [rows]);
@@ -99,6 +133,15 @@ export function DashboardClient({
   const targetRows = useMemo(() => targets.filter((r) => inScope(r.month)), [targets, scope, activeMonth]);
   const targetPipeline = targetRows.reduce((s, r) => s + r.targetPipeline, 0);
   const targetSpend = targetRows.reduce((s, r) => s + r.targetSpend, 0);
+
+  // Closed Won del semestre H2: deals de inbound (deal_attribution ya viene
+  // scoped a inbound) cerrados ganados a partir del 1 ago 2026. En las demás
+  // vistas seguimos usando el closedWon agregado de campañas (t.closedWon).
+  const closedWonH2 = useMemo(
+    () => deals.filter((d) => d.isClosedWon && d.month >= H2_DEALS_START).reduce((s, d) => s + d.amount, 0),
+    [deals],
+  );
+  const closedWon = scope === "h2" ? closedWonH2 : t.closedWon;
 
   const byChannel = useMemo(
     () =>
@@ -130,7 +173,7 @@ export function DashboardClient({
 
   // Cross-section: pipeline de deals por cohorte del lead (de Deals & Atribución).
   const dealsByCohort = useMemo(() => {
-    const inYear = deals.filter((d) => (scope === "month" ? d.month === activeMonth : d.month?.startsWith(year)));
+    const inYear = deals.filter((d) => dealInScope(d.month));
     const labels: Record<LeadCohort, string> = { "2026": "Leads 2026", "histórico": "Leads históricos", "sin contacto": "Sin contacto" };
     return (Object.keys(labels) as LeadCohort[]).map((c) => ({
       name: labels[c],
@@ -151,7 +194,7 @@ export function DashboardClient({
 
   // Cross-section: reparto de deals por estado (de Deals & Atribución).
   const dealsByState = useMemo(() => {
-    const inScopeDeals = deals.filter((d) => (scope === "month" ? d.month === activeMonth : d.month?.startsWith(year)));
+    const inScopeDeals = deals.filter((d) => dealInScope(d.month));
     const defs: { key: "abierto" | "ganado" | "cerrado"; label: string; color: string }[] = [
       { key: "abierto", label: "Abiertos", color: "var(--chart-1)" },
       { key: "ganado", label: "Ganados", color: "var(--chart-4)" },
@@ -162,7 +205,19 @@ export function DashboardClient({
       .filter((d) => d.value > 0);
   }, [deals, scope, activeMonth, year]);
 
-  const scopeLabel = scope === "month" ? `mes ${activeMonth}` : `año ${year} (YTD)`;
+  const scopeLabel = scope === "month" ? `mes ${activeMonth}` : scope === "ytd" ? `año ${year} (YTD)` : "H2 2026";
+
+  // Ayuda de tooltip que, en vista H2, añade la definición del semestre bajo el
+  // texto de origen del dato — así la INFO de cada punto explica el H2.
+  const withH2 = (base: React.ReactNode, note: string): React.ReactNode =>
+    scope === "h2" ? (
+      <>
+        {base}
+        <span className="mt-1.5 block border-t border-[var(--border)] pt-1.5 text-[var(--muted)]">{note}</span>
+      </>
+    ) : (
+      base
+    );
 
   // Registro de módulos: cada uno con título, ancho (col-span en lg) y contenido.
   const MODULES: Record<string, { title: string; span: number; node: React.ReactNode }> = {
@@ -171,21 +226,22 @@ export function DashboardClient({
       span: 3,
       node: (
         <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
-          <KpiCell label="Inversión" value={fmtEur(t.spend)} help={SRC.spend} icon={<Wallet className="h-5 w-5" />}
+          <KpiCell label="Inversión" value={fmtEur(t.spend)} help={withH2(SRC.spend, H2_NOTE.spend)} icon={<Wallet className="h-5 w-5" />}
             sub={targetSpend > 0 ? `Objetivo ${fmtEur(targetSpend)}` : undefined}
             delta={targetSpend > 0 ? { pace: spendPace!, positiveIsGood: false } : undefined} />
-          <KpiCell label="Pipeline generado" value={fmtEur(t.pipeline)} help={SRC.pipeline} icon={<TrendingUp className="h-5 w-5" />}
+          <KpiCell label="Pipeline generado" value={fmtEur(t.pipeline)} help={withH2(SRC.pipeline, H2_NOTE.pipeline)} icon={<TrendingUp className="h-5 w-5" />}
             sub={targetPipeline > 0 ? `Objetivo ${fmtEur(targetPipeline)}` : undefined}
             delta={targetPipeline > 0 ? { pace: pipelinePace!, positiveIsGood: true } : undefined} />
-          <KpiCell label="ROI" value={fmtPct(roi(t))} icon={<Target className="h-5 w-5" />} sub="Pipeline € por € invertido" />
-          <KpiCell label="Closed Won" value={fmtEur(t.closedWon)} icon={<Trophy className="h-5 w-5" />} sub="Deals ganados" />
+          <KpiCell label="ROI" value={fmtPct(roi(t))} help={withH2("Pipeline € generado por cada € invertido (pipeline ÷ inversión).", H2_NOTE.roi)} icon={<Target className="h-5 w-5" />} sub="Pipeline € por € invertido" />
+          <KpiCell label="Closed Won" value={fmtEur(closedWon)} help={withH2("Importe de deals ganados atribuidos, de HubSpot.", H2_NOTE.closedWon)} icon={<Trophy className="h-5 w-5" />}
+            sub={scope === "h2" ? "Inbound cerrado · desde ago 2026" : "Deals ganados"} />
         </div>
       ),
     },
     funnel: {
       title: `Embudo · ${scopeLabel}`,
       span: 2,
-      node: <FunnelBar t={t} help={SRC.funnel} />,
+      node: <FunnelBar t={t} help={withH2(SRC.funnel, H2_NOTE.funnel)} />,
     },
     pace: {
       title: "Ritmo vs objetivo",
@@ -349,11 +405,23 @@ export function DashboardClient({
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex w-fit items-center gap-1 rounded-lg bg-[var(--subtle)] p-1">
+          <ScopeTab label="H2 2026" active={scope === "h2"} onClick={() => setScope("h2")} />
           <ScopeTab label="Este mes" active={scope === "month"} onClick={() => setScope("month")} />
           <ScopeTab label="Año (YTD)" active={scope === "ytd"} onClick={() => setScope("ytd")} />
         </div>
         {hydrated && <AddModuleMenu hidden={hidden} modules={MODULES} onAdd={add} onReset={reset} />}
       </div>
+
+      {scope === "h2" && (
+        <div className="mb-6 flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--brand-soft)] px-3 py-2 text-xs leading-relaxed text-[var(--text-secondary)]">
+          <Target className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />
+          <span>
+            <strong className="text-[var(--text)]">Semestre H2 2026 (vs objetivo).</strong>{" "}
+            Pipeline € e inversión = lo generado desde el <strong>1 jun 2026</strong>; deals de inbound
+            cerrados = desde el <strong>1 ago 2026</strong>. La barra de cada objetivo marca el ritmo vs target.
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {visible.map((id, i) => {
@@ -610,7 +678,7 @@ function ScopeTab({ label, active, onClick }: { label: string; active: boolean; 
   );
 }
 
-function FunnelBar({ t, help }: { t: ReturnType<typeof sumMetrics>; help: string }) {
+function FunnelBar({ t, help }: { t: ReturnType<typeof sumMetrics>; help: React.ReactNode }) {
   const steps = [
     { label: "Leads", value: t.leads },
     { label: "MQL", value: t.mql },
