@@ -277,7 +277,7 @@ export function DashboardClient({
           <KpiCell label="Inversión" value={fmtEur(t.spend)}
             help={withH2(<>{SRC.spend}<span className="mt-1.5 block text-[var(--muted)]">{PACE_HELP}</span></>, H2_NOTE.spend)}
             icon={<Wallet className="h-5 w-5" />}
-            sub={targetSpend > 0 ? `Objetivo ${fmtEur(targetSpend)}` : undefined}
+            sub={targetSpend > 0 ? `Budget ${fmtEur(targetSpend)}` : undefined}
             tag={spendStatus} />
           <KpiCell label="Pipeline generado" value={fmtEur(t.pipeline)}
             help={withH2(<>{SRC.pipeline}<span className="mt-1.5 block text-[var(--muted)]">{PACE_HELP}</span></>, H2_NOTE.pipeline)}
