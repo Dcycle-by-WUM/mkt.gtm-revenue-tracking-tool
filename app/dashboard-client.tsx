@@ -459,7 +459,8 @@ export function DashboardClient({
         <div className="flex w-fit items-center gap-1 rounded-lg bg-[var(--subtle)] p-1">
           <ScopeTab label="H2 2026" active={scope === "h2"} onClick={() => setScope("h2")} />
           <ScopeTab label="Este mes" active={scope === "month"} onClick={() => setScope("month")} />
-          <ScopeTab label="Año (YTD)" active={scope === "ytd"} onClick={() => setScope("ytd")} />
+          {/* Tab "Año (YTD)" oculta de momento (petición Davide, ago-2026). La
+              lógica de scope "ytd" se conserva intacta para reactivarla fácil. */}
         </div>
         {hydrated && <AddModuleMenu hidden={hidden} modules={MODULES} onAdd={add} onReset={reset} />}
       </div>
