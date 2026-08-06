@@ -24,7 +24,7 @@ export default async function OverviewPage() {
     <div>
       <PageHeader
         title="Overview — Cómo vamos vs Target"
-        subtitle="Objetivo vs resultado por mes: Spain, Rest of Intl + DACH y Total. El mes en curso se proyecta a fin de mes; los cerrados muestran el real consolidado."
+        subtitle="Objetivo vs resultado por mes: Spain, Rest of Intl + DACH y Total. El Actual es siempre el real consolidado a fecha, sin proyectar."
       />
       <OverviewClient
         campaigns={campaigns}
