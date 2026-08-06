@@ -93,6 +93,9 @@ export type DbContact = {
   email_optout: boolean;
   num_contacted_notes: number;
   created_at_hs: string | null;
+  // Compelling event: webinars inscritos (enumeration multi-valor de HubSpot,
+  // lista separada por `;`). Ver lib/webinars.ts.
+  webinars_registrado: string | null;
   synced_at: string;
 };
 
@@ -284,6 +287,7 @@ export type DbDealAttribution = {
   hubspot_contact_id: string | null;
   contact_created_at: string | null;
   contact_created_month: string | null;      // YYYY-MM del contacto
+  webinars_registrado: string | null;        // webinars inscritos del contacto (0027) — lista `;`
 };
 
 export type DbOrganicTraffic = {

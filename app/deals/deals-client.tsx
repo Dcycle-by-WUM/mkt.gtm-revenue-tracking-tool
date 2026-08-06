@@ -7,6 +7,7 @@ import { emptyFilters, inMonthRange } from "@/lib/mock-data";
 import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur } from "@/lib/kpis";
 import { dealState, leadCohort, type DealRow, type DealState, type LeadCohort } from "@/lib/data/deals";
+import { formatWebinarMonth } from "@/lib/webinars";
 
 // Portal de HubSpot para deep-links a cada deal. Se configura en el entorno
 // (NEXT_PUBLIC_HUBSPOT_PORTAL_ID); si no está, no se muestra el enlace (así no
@@ -43,23 +44,39 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
   const [filters, setFilters] = useState(emptyFilters);
   const [cohortFilter, setCohortFilter] = useState<"" | LeadCohort>("");
   const [stateFilter, setStateFilter] = useState<"" | DealState>("");
+  // Filtro compelling event: "" todas · __any__ con webinar · __none__ sin
+  // webinar · <code> un webinar concreto.
+  const [webinarFilter, setWebinarFilter] = useState<string>("");
 
   // Región: manda la de negocio por pipeline (AE → Spain, International →
   // Rest of International); regionOf(country) solo como fallback para filas
   // anteriores a la migración 0017.
+  const matchesWebinar = (r: DealRow) => {
+    if (!webinarFilter) return true;
+    if (webinarFilter === "__any__") return r.webinars.length > 0;
+    if (webinarFilter === "__none__") return r.webinars.length === 0;
+    if (webinarFilter === "__compelling__") return r.webinars.some((w) => w.compelling);
+    return r.webinars.some((w) => w.code === webinarFilter);
+  };
+
   const matchesBase = (r: DealRow) =>
     (!filters.region || (r.businessRegion ?? regionOf(r.country, groups)) === filters.region) &&
     (!filters.country || r.country === filters.country) &&
     (!filters.month || r.month === filters.month) &&
     inMonthRange(r.month, filters) &&
     (!filters.channel || r.channel === filters.channel) &&
-    (!stateFilter || dealState(r) === stateFilter);
+    (!stateFilter || dealState(r) === stateFilter) &&
+    matchesWebinar(r);
 
   const rows = initial.filter((r) => matchesBase(r) && (!cohortFilter || leadCohort(r) === cohortFilter));
 
   const countries = [...new Set(initial.map((r) => r.country))].sort();
   const months = [...new Set(initial.map((r) => r.month))].sort();
   const channels = [...new Set(initial.map((r) => r.channel))].sort();
+  // Webinars distintos presentes (para el desplegable), con su etiqueta legible.
+  const webinarOptions = [
+    ...new Map(initial.flatMap((r) => r.webinars).map((w) => [w.code, w])).values(),
+  ].sort((a, b) => a.label.localeCompare(b.label));
 
   // Tiles de cohorte: respetan región/país/mes/canal pero ignoran el filtro
   // de cohorte (son precisamente el desglose por cohorte).
@@ -120,6 +137,20 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
           <option value="ganado">Ganados</option>
           <option value="cerrado">Perdidos / cerrados</option>
         </select>
+        <span className="text-xs uppercase tracking-wide text-[var(--muted)]">Webinar</span>
+        <select className={sel} value={webinarFilter} onChange={(e) => setWebinarFilter(e.target.value)}>
+          <option value="">Todos</option>
+          <option value="__any__">Con participación</option>
+          <option value="__compelling__">Compelling (mismo mes o siguiente)</option>
+          <option value="__none__">Sin participación</option>
+          {webinarOptions.length > 0 && <option disabled>──────────</option>}
+          {webinarOptions.map((w) => (
+            <option key={w.code} value={w.code}>
+              {w.label}
+              {w.ym ? ` (${formatWebinarMonth(w.ym)})` : ""}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--panel)] shadow-sm">
@@ -131,6 +162,7 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
               <th className="px-4 py-3">Pipeline HS</th>
               <th className="px-4 py-3">Canal</th>
               <th className="px-4 py-3">Campaña</th>
+              <th className="px-4 py-3">Participación webinar</th>
               <th className="px-4 py-3">País</th>
               <th className="px-4 py-3">Contacto creado</th>
               <th className="px-4 py-3">Cohorte</th>
@@ -175,6 +207,43 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-[var(--muted)]">{r.campaign ?? "—"}</td>
+                  <td className="px-4 py-2.5">
+                    {r.webinars.length === 0 ? (
+                      <span className="text-[var(--faint)]">—</span>
+                    ) : (
+                      (() => {
+                        // El compelling manda para elegir el webinar destacado.
+                        const lead = r.webinars.find((w) => w.compelling) ?? r.webinars[0];
+                        const anyCompelling = r.webinars.some((w) => w.compelling);
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            <span
+                              className="inline-flex items-center gap-1"
+                              title={r.webinars
+                                .map((w) => `${w.compelling ? "⚡ " : ""}${w.label}${w.ym ? ` (${formatWebinarMonth(w.ym)})` : ""}`)
+                                .join(" · ")}
+                            >
+                              <span className="rounded bg-[var(--warn-bg)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--warn-text)]">
+                                {lead.label}
+                                {lead.ym && <span className="ml-1 opacity-70">{formatWebinarMonth(lead.ym)}</span>}
+                              </span>
+                              {r.webinars.length > 1 && (
+                                <span className="text-[11px] text-[var(--muted)]">+{r.webinars.length - 1}</span>
+                              )}
+                            </span>
+                            {anyCompelling && (
+                              <span
+                                className="inline-flex w-fit items-center gap-1 rounded bg-[var(--good-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--good-text)]"
+                                title="Deal abierto el mismo mes o el siguiente al webinar — señal fuerte de que el evento movió el deal"
+                              >
+                                ⚡ Compelling event
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">{r.country}</td>
                   <td className="px-4 py-2.5 tabular-nums">{r.contactCreatedMonth ?? "—"}</td>
                   <td className="px-4 py-2.5">
@@ -188,7 +257,7 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-[var(--muted)]">
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-[var(--muted)]">
                   Sin deals para este filtro.
                 </td>
               </tr>
