@@ -10,7 +10,7 @@ import {
 } from "@/lib/mock-data";
 import { regionOf, type CountryGroups } from "@/lib/regions";
 import { fmtEur, fmtPct } from "@/lib/kpis";
-import { monthStatus, daysElapsedAndTotal, projectFullMonth, type MonthStatus } from "@/lib/pacing";
+import { monthStatus, daysElapsedAndTotal, type MonthStatus } from "@/lib/pacing";
 import { actionUpsertTarget } from "@/app/actions";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { GroupedBars, Donut } from "@/components/ui/charts";
@@ -105,12 +105,13 @@ function sumScope(rows: ScopeRow[]) {
   );
 }
 
-// Real consolidado si el mes ya cerró; proyección (pacing lineal sobre lo
-// consolidado a fecha) si está en curso; sin dato si es un mes futuro.
-function projected(value: number, month: string, status: MonthStatus): number | null {
+// Real consolidado a fecha: mes cerrado o en curso muestran el valor real
+// (sin proyectar); un mes futuro no tiene real todavía. Antes el mes en
+// curso se proyectaba a fin de mes (pacing lineal); se quitó para mostrar
+// siempre el dato real consolidado.
+function consolidated(value: number, _month: string, status: MonthStatus): number | null {
   if (status === "future") return null;
-  if (status === "past") return value;
-  return projectFullMonth(value, month);
+  return value;
 }
 
 // Cabecera alineada a la derecha con tooltip de origen del dato.
@@ -142,7 +143,7 @@ function DeltaBadge({ pct, mode }: { pct: number | null; mode: "pipeline" | "spe
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`}>{fmtPct(pct)}</span>;
 }
 
-// Stat de resumen: valor grande (real/proyectado) + objetivo + chip de %.
+// Stat de resumen: valor grande (real consolidado a fecha) + objetivo + chip de %.
 function SummaryStat({
   label,
   actual,
@@ -200,11 +201,10 @@ function PipelineTotalShare({
   status: MonthStatus;
 }) {
   const totalActual = monthRows.reduce((s, r) => s + r.amount, 0);
-  // Proyectamos el total con la misma convención que el resto de la pantalla
-  // (mes en curso → a fin de mes; cerrado → real; futuro → sin dato).
-  const totalShown = projected(totalActual, month, status);
-  // El % es invariante a la proyección (mismo factor arriba y abajo), así que
-  // lo calculamos sobre el real a fecha. Clamp defensivo a [0, 1].
+  // Real consolidado a fecha, misma convención que el resto de la pantalla
+  // (mes en curso o cerrado → real; futuro → sin dato).
+  const totalShown = consolidated(totalActual, month, status);
+  // El % se calcula sobre el real a fecha. Clamp defensivo a [0, 1].
   const inboundPct = totalActual > 0 ? Math.min(1, inboundActual / totalActual) : null;
   const outboundActual = Math.max(0, totalActual - inboundActual);
 
@@ -342,8 +342,8 @@ function ScopeTable({
   showSpendBar?: boolean;
 }) {
   const total = sumScope(rows);
-  const projTargetSpend = projected(total.actualSpend, month, status);
-  const projTargetPipeline = projected(total.actualPipeline, month, status);
+  const projTargetSpend = consolidated(total.actualSpend, month, status);
+  const projTargetPipeline = consolidated(total.actualPipeline, month, status);
 
   return (
     <div className="card">
@@ -358,17 +358,17 @@ function ScopeTable({
             <tr>
               <th className="px-3 py-2">Canal</th>
               <th className="px-3 py-2 text-right">Budget</th>
-              <ThRight label="Spend Actual" help="Inversión real de paid media (LinkedIn+Google) vía Supermetrics. En el mes en curso, proyectada a fin de mes." />
+              <ThRight label="Spend Actual" help="Inversión real de paid media (LinkedIn+Google) vía Supermetrics. Real consolidado a fecha, sin proyectar." />
               <th className="px-3 py-2 text-right">Δ</th>
               <th className="px-3 py-2 text-right">Pipeline Obj</th>
-              <ThRight label="Pipeline Actual" help="Pipeline € real de deals atribuidos (HubSpot), por utm_campaign. En el mes en curso, proyectado a fin de mes." />
+              <ThRight label="Pipeline Actual" help="Pipeline € real de deals atribuidos (HubSpot), por utm_campaign. Real consolidado a fecha, sin proyectar." />
               <th className="px-3 py-2 text-right">Δ</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
-              const spendActual = projected(r.actualSpend, month, status);
-              const pipeActual = projected(r.actualPipeline, month, status);
+              const spendActual = consolidated(r.actualSpend, month, status);
+              const pipeActual = consolidated(r.actualPipeline, month, status);
               return (
                 <tr key={r.channel} className="border-t border-[var(--border)]">
                   <td className="px-3 py-2">{r.channel}</td>
@@ -484,7 +484,7 @@ function StatusBadge({ month, status }: { month: string; status: MonthStatus }) 
   const { elapsed, total } = daysElapsedAndTotal(month);
   return (
     <span className="rounded-full bg-[var(--info-bg)] px-3 py-1 text-xs font-medium text-[var(--info-text)]">
-      En curso · día {elapsed}/{total} ({fmtPct(elapsed / total)}) · proyectado a fin de mes
+      En curso · día {elapsed}/{total} ({fmtPct(elapsed / total)}) · real a fecha
     </span>
   );
 }
@@ -695,13 +695,13 @@ export function OverviewClient({
           <div className="grid grid-cols-2 gap-4">
             <SummaryStat
               label="Pipeline"
-              actual={projected(totalSel.actualPipeline, month, status)}
+              actual={consolidated(totalSel.actualPipeline, month, status)}
               target={totalSel.targetPipeline}
               mode="pipeline"
             />
             <SummaryStat
               label="Inversión"
-              actual={projected(totalSel.actualSpend, month, status)}
+              actual={consolidated(totalSel.actualSpend, month, status)}
               target={totalSel.targetSpend}
               mode="spend"
             />
@@ -790,8 +790,8 @@ export function OverviewClient({
 
       <p className="mt-4 text-xs text-[var(--muted)]">
         Total no se edita: Budget/Pipeline Obj son la suma de Spain + Rest of Intl + DACH, y Spend/Pipeline Actual son
-        la suma real de todas las campañas del mes. En el mes en curso el Actual es una proyección a fin de mes a
-        partir de lo consolidado a fecha (pacing lineal); en meses cerrados es el real consolidado.
+        la suma real de todas las campañas del mes. El Actual es siempre el real consolidado a fecha (sin proyectar),
+        tanto en el mes en curso como en meses cerrados.
       </p>
     </>
   );
