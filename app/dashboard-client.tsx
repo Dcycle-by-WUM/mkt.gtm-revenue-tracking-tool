@@ -21,6 +21,7 @@ import {
 import { sumMetrics, groupBy, type CampaignRow, type ForecastRow } from "@/lib/mock-data";
 import { fmtEur, fmtNum, fmtPct, roi, cpl, cpmql } from "@/lib/kpis";
 import { leadCohort, dealState, type DealRow, type LeadCohort } from "@/lib/data/deals";
+import { monthStatus, daysElapsedAndTotal } from "@/lib/pacing";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { Donut } from "@/components/ui/charts";
 
@@ -66,6 +67,42 @@ const H2_NOTE = {
 function thisMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Objetivo esperado A DÍA DE HOY para un mes: los meses ya cerrados cuentan su
+// objetivo completo; el mes en curso se prorratea por el día actual (días
+// transcurridos / días del mes); los meses futuros aún no aportan. Al sumarlo
+// sobre los meses del periodo se obtiene "cuánto objetivo tocaría llevar ya",
+// que es contra lo que comparamos el acumulado real para decir si vamos bien.
+function targetToDate(month: string, target: number): number {
+  const st = monthStatus(month);
+  if (st === "future") return 0;
+  if (st === "past") return target;
+  const { elapsed, total } = daysElapsedAndTotal(month);
+  return total > 0 ? target * (elapsed / total) : target;
+}
+
+// Etiqueta de estado (en vez del % de desvío). Banda de ±10% alrededor del
+// ritmo esperado a fecha = "On track". Fuera de banda, el color depende de la
+// métrica: en inversión pasarse es malo (rojo) y quedarse corto es bueno
+// (verde); en pipeline es al revés.
+type PaceTag = { label: string; tone: "good" | "error" };
+const PACE_BAND = 0.1;
+
+// Explicación (tooltip) del estado: se mide contra el objetivo prorrateado al
+// día actual del periodo, sobre el importe acumulado a fecha.
+const PACE_HELP = "Estado a día de hoy: compara el acumulado del periodo con el objetivo prorrateado al día actual (±10% = On track).";
+function spendTag(ratio: number | null): PaceTag | null {
+  if (ratio === null) return null;
+  if (ratio > 1 + PACE_BAND) return { label: "Overspending", tone: "error" };
+  if (ratio < 1 - PACE_BAND) return { label: "Underspending", tone: "good" };
+  return { label: "On track", tone: "good" };
+}
+function pipelineTag(ratio: number | null): PaceTag | null {
+  if (ratio === null) return null;
+  if (ratio > 1 + PACE_BAND) return { label: "Overperforming", tone: "good" };
+  if (ratio < 1 - PACE_BAND) return { label: "Underperforming", tone: "error" };
+  return { label: "On track", tone: "good" };
 }
 
 // Orden por defecto de módulos visibles. `topCampaigns` no está → se puede
@@ -163,8 +200,19 @@ export function DashboardClient({
     [rows],
   );
 
-  const pipelinePace = targetPipeline > 0 ? t.pipeline / targetPipeline : null;
-  const spendPace = targetSpend > 0 ? t.spend / targetSpend : null;
+  // Objetivo esperado a día de hoy (prorrateado por el día actual del periodo)
+  // y ratio del acumulado real sobre ese esperado → alimenta las etiquetas de
+  // estado (On track / Over- / Under-).
+  const expectedSpend = useMemo(
+    () => targetRows.reduce((s, r) => s + targetToDate(r.month, r.targetSpend), 0),
+    [targetRows],
+  );
+  const expectedPipeline = useMemo(
+    () => targetRows.reduce((s, r) => s + targetToDate(r.month, r.targetPipeline), 0),
+    [targetRows],
+  );
+  const spendStatus = spendTag(expectedSpend > 0 ? t.spend / expectedSpend : null);
+  const pipelineStatus = pipelineTag(expectedPipeline > 0 ? t.pipeline / expectedPipeline : null);
 
   const overspend = byChannel.filter((c) => {
     const tgt = targetRows.filter((r) => r.channel === c.name).reduce((s, r) => s + r.targetSpend, 0);
@@ -226,12 +274,16 @@ export function DashboardClient({
       span: 3,
       node: (
         <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
-          <KpiCell label="Inversión" value={fmtEur(t.spend)} help={withH2(SRC.spend, H2_NOTE.spend)} icon={<Wallet className="h-5 w-5" />}
+          <KpiCell label="Inversión" value={fmtEur(t.spend)}
+            help={withH2(<>{SRC.spend}<span className="mt-1.5 block text-[var(--muted)]">{PACE_HELP}</span></>, H2_NOTE.spend)}
+            icon={<Wallet className="h-5 w-5" />}
             sub={targetSpend > 0 ? `Objetivo ${fmtEur(targetSpend)}` : undefined}
-            delta={targetSpend > 0 ? { pace: spendPace!, positiveIsGood: false } : undefined} />
-          <KpiCell label="Pipeline generado" value={fmtEur(t.pipeline)} help={withH2(SRC.pipeline, H2_NOTE.pipeline)} icon={<TrendingUp className="h-5 w-5" />}
+            tag={spendStatus} />
+          <KpiCell label="Pipeline generado" value={fmtEur(t.pipeline)}
+            help={withH2(<>{SRC.pipeline}<span className="mt-1.5 block text-[var(--muted)]">{PACE_HELP}</span></>, H2_NOTE.pipeline)}
+            icon={<TrendingUp className="h-5 w-5" />}
             sub={targetPipeline > 0 ? `Objetivo ${fmtEur(targetPipeline)}` : undefined}
-            delta={targetPipeline > 0 ? { pace: pipelinePace!, positiveIsGood: true } : undefined} />
+            tag={pipelineStatus} />
           <KpiCell label="ROI" value={fmtPct(roi(t))} help={withH2("Pipeline € generado por cada € invertido (pipeline ÷ inversión).", H2_NOTE.roi)} icon={<Target className="h-5 w-5" />} sub="Pipeline € por € invertido" />
           <KpiCell label="Closed Won" value={fmtEur(closedWon)} help={withH2("Importe de deals ganados atribuidos, de HubSpot.", H2_NOTE.closedWon)} icon={<Trophy className="h-5 w-5" />}
             sub={scope === "h2" ? "Inbound cerrado · desde ago 2026" : "Deals ganados"} />
@@ -613,14 +665,14 @@ function KpiCell({
   help,
   sub,
   icon,
-  delta,
+  tag,
 }: {
   label: string;
   value: React.ReactNode;
   help?: React.ReactNode;
   sub?: React.ReactNode;
   icon?: React.ReactNode;
-  delta?: { pace: number; positiveIsGood: boolean };
+  tag?: PaceTag | null;
 }) {
   return (
     <div>
@@ -635,32 +687,24 @@ function KpiCell({
       </div>
       <div className="flex items-end gap-2">
         <span className="text-3xl font-semibold leading-none tabular-nums">{value}</span>
-        {delta && <DeltaChip pace={delta.pace} positiveIsGood={delta.positiveIsGood} />}
+        {tag && <StatusTag tag={tag} />}
       </div>
       {sub && <div className="mt-1.5 text-xs text-[var(--muted)]">{sub}</div>}
     </div>
   );
 }
 
-// Chip de tendencia vs objetivo: ▲/▼ + desvío (p. ej. +6,6% / −1,9%), en verde
-// si el ritmo es bueno, ámbar si roza, rojo si se desvía mucho. `positiveIsGood`
-// distingue pipeline (más = mejor) de inversión (pasarse = malo).
-function DeltaChip({ pace, positiveIsGood }: { pace: number; positiveIsGood: boolean }) {
-  const diff = pace - 1;
-  const above = pace >= 1;
-  const tone = positiveIsGood
-    ? pace >= 0.95 ? "good" : pace >= 0.7 ? "warn" : "error"
-    : pace <= 1 ? "good" : pace <= 1.1 ? "warn" : "error";
-  const cls = {
-    good: "bg-[var(--good-bg)] text-[var(--good-text)]",
-    warn: "bg-[var(--warn-bg)] text-[var(--warn-text)]",
-    error: "bg-[var(--error-bg)] text-[var(--error-text)]",
-  }[tone];
-  const sign = diff >= 0 ? "+" : "−";
+// Etiqueta de estado vs objetivo (a día de hoy): pequeña, solo texto, verde o
+// rojo según `tone`. Sustituye al antiguo chip de % de desvío por un juicio
+// directo (On track / Overspending / Overperforming / …).
+function StatusTag({ tag }: { tag: PaceTag }) {
+  const cls =
+    tag.tone === "good"
+      ? "bg-[var(--good-bg)] text-[var(--good-text)]"
+      : "bg-[var(--error-bg)] text-[var(--error-text)]";
   return (
-    <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums ${cls}`}>
-      {above ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-      {sign}{fmtPct(Math.abs(diff))}
+    <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-none ${cls}`}>
+      {tag.label}
     </span>
   );
 }
