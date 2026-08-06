@@ -7,7 +7,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import type { DbDealAttribution } from "@/lib/supabase/types";
 import { normalizeCountryLabel } from "@/lib/regions";
-import { parseWebinarList, type Webinar } from "@/lib/webinars";
+import { parseWebinarList, addMonths, type Webinar } from "@/lib/webinars";
 
 export type DealRow = {
   dealId: string;
@@ -30,20 +30,31 @@ export type DealRow = {
   campaign: string | null;
   country: string;
   contactCreatedMonth: string | null;
-  // Compelling event: webinars a los que estaba inscrito el contacto que
-  // originó el deal, filtrados a los que preceden al deal (el deal se abrió en
-  // o después del mes del webinar). Independiente de campaña/UTM. Ver
-  // `webinarsForDeal` y lib/webinars.ts.
-  webinars: Webinar[];
+  // Compelling event: TODOS los webinars a los que está inscrita la empresa del
+  // deal (contacto guardado + cualquier contacto del mismo dominio; se resuelve
+  // en la vista `deal_attribution`). Sin filtro de fecha: interesa saber a qué
+  // webinars ha asistido la empresa aunque el webinar sea posterior al deal.
+  // `compelling` marca el subconjunto fuerte: deal abierto el mismo mes o el
+  // siguiente al webinar. Independiente de campaña/UTM. Ver `webinarsForDeal`.
+  webinars: DealWebinar[];
 };
 
-// Corte compelling event: de los webinars inscritos del contacto, quedarse con
-// los que el deal pudo "capitalizar" — el deal se abrió en o después del mes
-// del webinar (`dealMonth >= ym`). Los webinars sin mes codificado en el código
-// se conservan (no escondemos una inscripción real por no poder datarla); los
-// posteriores al deal se descartan (no pudieron influir en su apertura).
-export function webinarsForDeal(raw: string | null, dealMonth: string): Webinar[] {
-  return parseWebinarList(raw).filter((w) => w.ym === null || dealMonth >= w.ym);
+// Webinar de un deal, con la marca de "compelling event".
+export type DealWebinar = Webinar & { compelling: boolean };
+
+// Compelling event = el deal se abrió el MISMO mes o el SIGUIENTE al webinar
+// (`dealMonth ∈ {ym, ym+1}`) — señal fuerte de que el webinar movió el deal.
+// Sin mes codificado en el código no se puede datar → no es compelling.
+export function isCompellingWebinar(dealMonth: string, ym: string | null): boolean {
+  if (!ym) return false;
+  return dealMonth === ym || dealMonth === addMonths(ym, 1);
+}
+
+// Todos los webinars inscritos de la empresa del deal, anotados con `compelling`.
+// Ya no se filtra por fecha: se muestran todos, y el marcador distingue el
+// subconjunto compelling.
+export function webinarsForDeal(raw: string | null, dealMonth: string): DealWebinar[] {
+  return parseWebinarList(raw).map((w) => ({ ...w, compelling: isCompellingWebinar(dealMonth, w.ym) }));
 }
 
 // Estado del deal para la pantalla: abierto / ganado / perdido.

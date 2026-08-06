@@ -1,19 +1,26 @@
 -- Compelling events por webinar (Davide, ago-26). HubSpot tiene la property de
 -- contacto `webinars_registrado` (enumeration multi-valor) con los webinars a
 -- los que se inscribió el contacto, p. ej. `wb_ppwr-spain_jul26`. Queremos, en
--- Deals & Atribución, un badge "Participación webinar" cuando el contacto que
--- originó un deal inbound estaba inscrito a un webinar Y el deal se abrió en o
--- después del mes del evento (el mes va codificado en el propio código, así que
--- no hace falta ni CSV ni tabla de fechas — se resuelve en la app, lib/webinars.ts).
+-- Deals & Atribución, un badge "Participación webinar" con TODOS los webinars a
+-- los que está inscrita la EMPRESA del deal (sin filtro de fecha: interesa
+-- saber a qué webinars ha asistido, aunque el webinar sea posterior al deal).
+--
+-- Match a nivel empresa: se toma el webinar del contacto guardado en el deal Y
+-- el de cualquier contacto cuyo dominio de email coincida con el de la empresa
+-- (`accounts.domain`), excluyendo dominios de email genéricos. El mes del
+-- evento va codificado en el código (`_jul26`), así que el marcador "compelling
+-- event" (deal abierto el mismo mes o el siguiente al webinar) se calcula en la
+-- app sin CSV ni tabla de fechas (lib/webinars.ts, lib/data/deals.ts).
 --
 -- Independiente de la atribución UTM/campaña: un deal puede venir de una campaña
 -- y a la vez tener participación en un webinar; son dos señales distintas.
 --
--- Aquí solo: (1) columna nueva en `contacts` (la rellena el próximo sync-crm,
--- lib/hubspot.ts ya pide la property) y (2) exponer esa columna en la vista
--- `deal_attribution` (grano deal). El corte por fecha y el badge se calculan en
--- la capa de datos de la app. Las vistas KPI se recrean idénticas a 0024: no
--- usan la columna nueva, pero el drop de `deal_attribution` las arrastra.
+-- Aquí: (1) columna nueva en `contacts` (la rellena el próximo sync-crm,
+-- lib/hubspot.ts ya pide la property) y (2) exponer en la vista
+-- `deal_attribution` (grano deal) la lista de webinars de la empresa. El corte
+-- por fecha / marcador y el badge se calculan en la capa de datos de la app.
+-- Las vistas KPI se recrean idénticas a 0024: no usan la columna nueva, pero el
+-- drop de `deal_attribution` las arrastra.
 --
 -- Solo-vista salvo el ALTER: aplicar en el SQL editor de producción; efecto
 -- tras el próximo sync-crm + refresh_kpi_views(), sin deploy de la capa de datos.
@@ -26,7 +33,21 @@ drop materialized view if exists kpi_organic_by_month;
 drop view if exists deal_attribution;
 
 create view deal_attribution as
-with base as (
+with webinar_by_domain as (
+  -- Rollup a nivel EMPRESA: todos los webinars inscritos agregados por dominio
+  -- de email del contacto. Permite marcar un deal aunque el webinar lo
+  -- registrara OTRO contacto de la misma empresa (no el guardado en el deal).
+  -- Limitado a los contactos ya sincronizados (inbound + linked a deals).
+  select
+    lower(split_part(email, '@', 2))    as domain,
+    string_agg(webinars_registrado, ';') as webinars
+  from contacts
+  where webinars_registrado is not null
+    and split_part(coalesce(email, ''), '@', 2) <> ''
+    and coalesce(email, '') not ilike '%@dcycle.io'
+  group by lower(split_part(email, '@', 2))
+),
+base as (
   select
     d.hubspot_deal_id,
     d.dealname,
@@ -48,7 +69,10 @@ with base as (
     ct.country_parsed                           as ct_country,
     ct.country_raw                              as ct_country_raw,
     ct.created_at_hs                            as ct_created_at,
-    ct.webinars_registrado                      as ct_webinars,
+    -- Webinars de la empresa: contacto guardado del deal + rollup por dominio
+    -- (excluyendo proveedores de email genéricos, que no identifican empresa).
+    -- Dedup por código se hace en la app (parseWebinarList). null si ninguno.
+    nullif(concat_ws(';', ct.webinars_registrado, wbd.webinars), '') as webinars_agg,
     acc.country                                 as acc_country,
     cmp.id                                      as cmp_id,
     cmp.campaign_name                           as cmp_campaign,
@@ -72,6 +96,13 @@ with base as (
   join pipeline_country_map pcm on pcm.pipeline_id = d.pipeline
   left join contacts ct on ct.hubspot_contact_id = d.hubspot_contact_id
   left join accounts acc on acc.hubspot_company_id = d.hubspot_company_id
+  left join webinar_by_domain wbd
+    on acc.domain is not null and acc.domain <> ''
+    and wbd.domain = lower(acc.domain)
+    and lower(acc.domain) not in (
+      'gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'yahoo.es',
+      'hotmail.es', 'icloud.com', 'live.com', 'msn.com', 'gmail.es', 'aol.com'
+    )
   left join lateral (
     select c.id, c.campaign_name, c.country_parsed
     from campaign_match_keys cmk
@@ -112,7 +143,7 @@ select
   ct_id                                            as hubspot_contact_id,
   ct_created_at                                    as contact_created_at,
   to_char(ct_created_at, 'YYYY-MM')                as contact_created_month,
-  ct_webinars                                      as webinars_registrado
+  webinars_agg                                     as webinars_registrado
 from base
 where resolved_channel is not null;
 

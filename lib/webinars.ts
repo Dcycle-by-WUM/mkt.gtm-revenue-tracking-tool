@@ -85,6 +85,16 @@ export function parseWebinarList(raw: string | null | undefined): Webinar[] {
   return out;
 }
 
+// Suma `n` meses a un `YYYY-MM` (maneja el cambio de año). Se usa para el
+// corte "mismo mes o el siguiente" del compelling event.
+export function addMonths(ym: string, n: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const total = y * 12 + (m - 1) + n;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, "0")}`;
+}
+
 // Etiqueta corta de mes para la UI ("jul '26"). Vacío si no hay mes.
 const MONTH_LABELS = ["", "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 export function formatWebinarMonth(ym: string | null): string {

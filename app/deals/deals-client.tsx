@@ -55,6 +55,7 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
     if (!webinarFilter) return true;
     if (webinarFilter === "__any__") return r.webinars.length > 0;
     if (webinarFilter === "__none__") return r.webinars.length === 0;
+    if (webinarFilter === "__compelling__") return r.webinars.some((w) => w.compelling);
     return r.webinars.some((w) => w.code === webinarFilter);
   };
 
@@ -140,6 +141,7 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
         <select className={sel} value={webinarFilter} onChange={(e) => setWebinarFilter(e.target.value)}>
           <option value="">Todos</option>
           <option value="__any__">Con participación</option>
+          <option value="__compelling__">Compelling (mismo mes o siguiente)</option>
           <option value="__none__">Sin participación</option>
           {webinarOptions.length > 0 && <option disabled>──────────</option>}
           {webinarOptions.map((w) => (
@@ -209,22 +211,37 @@ export function DealsClient({ initial, groups }: { initial: DealRow[]; groups: C
                     {r.webinars.length === 0 ? (
                       <span className="text-[var(--faint)]">—</span>
                     ) : (
-                      <span
-                        className="inline-flex items-center gap-1"
-                        title={r.webinars
-                          .map((w) => `${w.label}${w.ym ? ` (${formatWebinarMonth(w.ym)})` : ""}`)
-                          .join(" · ")}
-                      >
-                        <span className="rounded bg-[var(--warn-bg)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--warn-text)]">
-                          {r.webinars[0].label}
-                          {r.webinars[0].ym && (
-                            <span className="ml-1 opacity-70">{formatWebinarMonth(r.webinars[0].ym)}</span>
-                          )}
-                        </span>
-                        {r.webinars.length > 1 && (
-                          <span className="text-[11px] text-[var(--muted)]">+{r.webinars.length - 1}</span>
-                        )}
-                      </span>
+                      (() => {
+                        // El compelling manda para elegir el webinar destacado.
+                        const lead = r.webinars.find((w) => w.compelling) ?? r.webinars[0];
+                        const anyCompelling = r.webinars.some((w) => w.compelling);
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            <span
+                              className="inline-flex items-center gap-1"
+                              title={r.webinars
+                                .map((w) => `${w.compelling ? "⚡ " : ""}${w.label}${w.ym ? ` (${formatWebinarMonth(w.ym)})` : ""}`)
+                                .join(" · ")}
+                            >
+                              <span className="rounded bg-[var(--warn-bg)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--warn-text)]">
+                                {lead.label}
+                                {lead.ym && <span className="ml-1 opacity-70">{formatWebinarMonth(lead.ym)}</span>}
+                              </span>
+                              {r.webinars.length > 1 && (
+                                <span className="text-[11px] text-[var(--muted)]">+{r.webinars.length - 1}</span>
+                              )}
+                            </span>
+                            {anyCompelling && (
+                              <span
+                                className="inline-flex w-fit items-center gap-1 rounded bg-[var(--good-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--good-text)]"
+                                title="Deal abierto el mismo mes o el siguiente al webinar — señal fuerte de que el evento movió el deal"
+                              >
+                                ⚡ Compelling event
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()
                     )}
                   </td>
                   <td className="px-4 py-2.5">{r.country}</td>
